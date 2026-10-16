@@ -6,7 +6,7 @@ Next.js 16 (App Router, cache components) + React 19, Tailwind v4, Framer Motion
 ```bash
 npm install
 npm run dev        # http://localhost:3000   (needs frontend/.env.local, see ../keys/frontend.env.example)
-npm run lint && npx tsc --noEmit && npm run build
+npm run lint && npm test && npm run typecheck && npm run build
 ```
 
 ## What lives here

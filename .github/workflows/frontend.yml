@@ -20,5 +20,6 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run lint
+      - run: npm test               # vitest: engine client, checkout tokens, subscriptions, advisor providers
       - run: npm run build          # also generates Next's route types (LayoutProps etc.) and type-checks
-      - run: npx tsc --noEmit       # must run AFTER the build so the generated types exist
+      - run: npm run typecheck      # generates Next's route types, then tsc --noEmit
