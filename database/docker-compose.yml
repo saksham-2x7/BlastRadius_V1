@@ -1,0 +1,17 @@
+# Local FalkorDB for development:   docker compose -f database/docker-compose.yml up -d
+# FalkorDB on localhost:6379 (what backend/.env expects), browser UI on http://localhost:3001
+services:
+  falkordb:
+    image: falkordb/falkordb:latest
+    ports:
+      - "6379:6379"
+      - "3001:3000"
+    environment:
+      BROWSER: "1"                                   # web UI on; always 0 in production
+      REDIS_ARGS: "${REDIS_ARGS:---appendonly yes}"  # set to "--requirepass <pw> --appendonly yes" to require a password
+    volumes:
+      - falkordb-data:/var/lib/falkordb/data
+    restart: unless-stopped
+
+volumes:
+  falkordb-data:
