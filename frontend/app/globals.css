@@ -1,0 +1,121 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f4f2ed;
+  --panel: #ffffff;
+  --panel-2: #efece5;
+  --line: rgba(13, 13, 15, 0.12);
+  --fg: #0d0d0f;
+  --muted: #6b6a66;
+  --accent: #ff4b2b;
+  --accent-2: #e8391a;
+  --danger: #e8391a;
+  --warn: #c77d00;
+  --ok: #0f9d6b;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-line: var(--line);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-danger: var(--danger);
+  --color-warn: var(--warn);
+  --color-ok: var(--ok);
+  --font-sans: var(--font-inter), var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-instrument), Georgia, serif;
+}
+
+html {
+  color-scheme: light;
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+::selection {
+  background: rgba(255, 75, 43, 0.25);
+}
+
+.bg-grid {
+  background-image:
+    linear-gradient(to right, rgba(148, 163, 184, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148, 163, 184, 0.06) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+}
+
+.text-gradient {
+  background: linear-gradient(180deg, #0d0d0f 0%, #6b6a66 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+.cursor-blink {
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes kev-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.55), 0 0 10px rgba(244, 63, 94, 0.35); }
+  50% { box-shadow: 0 0 0 3px rgba(244, 63, 94, 0), 0 0 16px rgba(244, 63, 94, 0.6); }
+}
+.kev-glow {
+  animation: kev-pulse 2.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kev-glow, .cursor-blink { animation: none; }
+}
+
+.hud-scanlines {
+  background-image: repeating-linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 0, rgba(255, 255, 255, 0.025) 1px, transparent 1px, transparent 3px);
+}
+
+/* Console surfaces: warm off-white with a faint dot grid, like the light landing page. */
+.console-bg {
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(ellipse 80% 40% at 50% -10%, rgba(255, 75, 43, 0.07), transparent 70%),
+    radial-gradient(rgba(13, 13, 15, 0.08) 1px, transparent 1px);
+  background-size: auto, 28px 28px;
+  background-attachment: fixed;
+}
+/* Primary button: ink pill that floods with the accent on hover (same as the landing) */
+.btn-chrome {
+  background: #0d0d0f;
+  color: #f4f2ed;
+  box-shadow: 0 10px 30px -14px rgba(13, 13, 15, 0.6);
+}
+.btn-chrome:hover { background: var(--accent); color: #fff; }
+.panel-sheen {
+  background-image: none;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset, 0 20px 50px -34px rgba(13, 13, 15, 0.35);
+}
+
+/* Scan reveal: an edge that turns hot is wiped into view (dashed, flowing) from its source to its target; chips fade in as the flow reaches them. */
+@keyframes br-wipe {
+  from { clip-path: inset(-14px 100% -14px -14px); }
+  to { clip-path: inset(-14px -14px -14px -14px); }
+}
+.br-revealing .br-edge-hot .react-flow__edge-path {
+  /* the dashed red flow itself keeps running; a left-to-right wipe reveals it as the scan's flow arrives */
+  animation: dashdraw 0.5s linear infinite, br-wipe 0.85s cubic-bezier(0.45, 0.05, 0.25, 1) both;
+  animation-delay: 0s, calc(var(--d, 0) * 0.9s);
+}
+@media (prefers-reduced-motion: reduce) {
+  .br-revealing .br-edge-hot .react-flow__edge-path { animation: none; }
+}
