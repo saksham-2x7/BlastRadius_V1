@@ -1,0 +1,6 @@
+# Run from the backend/ folder:  pip install -r requirements.txt
+-e ../database          # the graph layer (FalkorDB connection, schema/seed, accounts)
+fastapi==0.143.0
+uvicorn[standard]==0.54.0
+python-dotenv==1.2.4
+mcp==1.30.0
