@@ -1,0 +1,27 @@
+name: ui-guard
+# Branches whose name starts with "ui-" are UI-only. This fails the PR if it changes anything outside the presentation layer.
+on:
+  pull_request:
+jobs:
+  guard:
+    if: startsWith(github.head_ref, 'ui-')
+    runs-on: ubuntu-latest
+    env:
+      BASE: ${{ github.base_ref }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Changed files must stay in the UI layer
+        run: |
+          git diff --name-only "origin/$BASE"...HEAD > changed.txt
+          echo "Changed files:"; sed 's/^/  /' changed.txt
+          bad=$(grep -E '^(backend/|database/|keys/|frontend/app/api/|frontend/lib/|\.github/)' changed.txt | grep -v '^\.github/workflows/ui-guard\.yml$' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::UI branches must not change backend, database, keys, API routes, lib or CI. Offending files:"
+            echo "$bad"
+            exit 1
+          fi
+          warn=$(grep -E '^frontend/(package(-lock)?\.json|next\.config\.ts|tsconfig\.json)$' changed.txt || true)
+          if [ -n "$warn" ]; then echo "::warning::Dependency/build config changed. Review carefully:"; echo "$warn"; fi
+          echo "UI-only change set: OK"

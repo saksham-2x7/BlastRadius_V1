@@ -1,0 +1,34 @@
+name: backend
+on:
+  push:
+    branches: [main]
+    paths: ["backend/**", "database/**", ".github/workflows/backend.yml"]
+  pull_request:
+    paths: ["backend/**", "database/**", ".github/workflows/backend.yml"]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      falkordb:
+        image: falkordb/falkordb:latest
+        ports: ["6379:6379"]
+    env:
+      FALKORDB_HOST: 127.0.0.1
+      FALKORDB_PORT: "6379"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python -m compileall -q .
+      - name: Tests (tier guard, import validation, agent + tenant isolation against a real FalkorDB)
+        run: pip install pytest && python -m pytest -q tests
+      - name: App imports cleanly
+        run: python -c "import config, main; print('backend imports OK')"
+      - name: Docker image builds (same build Railway runs)
+        working-directory: .
+        run: docker build -f backend/Dockerfile -t blastradius-backend .
