@@ -1,6 +1,9 @@
 # BlastRadius
 
 **See the attack paths. Fix what actually matters.**
+
+**Live demo: [blastradius-ashy.vercel.app](https://blastradius-ashy.vercel.app)**
+
 BlastRadius maps infrastructure as a graph in FalkorDB, finds every real route from the internet to your crown jewels, ranks findings by the attack paths they sit on (not CVSS), and fixes the few that cut them: automatically when low-risk, with human approval when not. An AI advisor reads the graph through MCP tools.
 
 
