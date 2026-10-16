@@ -1,0 +1,17 @@
+# OS / editors
+.DS_Store
+
+# Secrets: real values NEVER go in git. Templates live in keys/. (see keys/README.md)
+.env
+.env.*
+*.local.txt
+*.pem
+
+# Python (backend + database)
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Platform
+.vercel
