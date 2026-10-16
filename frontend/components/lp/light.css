@@ -1,0 +1,370 @@
+/* Light landing page (route /light). Everything is scoped under .lp so the dark console is untouched. */
+.lp {
+  --lp-bg: #f4f2ed;
+  --lp-bg-2: #ecE9e2;
+  --lp-ink: #0d0d0f;
+  --lp-muted: #6b6a66;
+  --lp-line: rgba(13, 13, 15, 0.12);
+  --lp-accent: #ff4b2b;
+  --lp-accent-soft: #ffd9cf;
+  --lp-ok: #0f9d6b;
+  --lp-warn: #d98a00;
+  background: var(--lp-bg);
+  color: var(--lp-ink);
+  font-family: var(--font-inter), var(--font-geist-sans), system-ui, sans-serif;
+  overflow-x: clip;
+  position: relative;
+}
+.lp *,
+.lp *::before,
+.lp *::after {
+  box-sizing: border-box;
+}
+.lp :where(a) {
+  color: inherit;
+  text-decoration: none;
+}
+.lp .serif {
+  font-family: var(--font-instrument), Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+.lp .mono {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+/* film grain */
+.lp-grain {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  opacity: 0.06;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+@keyframes lp-grain {
+  0% { transform: translate(0, 0); }
+  20% { transform: translate(-3%, 2%); }
+  40% { transform: translate(2%, -3%); }
+  60% { transform: translate(-2%, -1%); }
+  80% { transform: translate(3%, 3%); }
+  100% { transform: translate(0, 0); }
+}
+
+/* custom cursor (fine pointers only) */
+.lp-cursor-dot,
+.lp-cursor-ring {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 200;
+  pointer-events: none;
+  border-radius: 999px;
+  display: none;
+  opacity: 0;
+}
+@media (hover: hover) and (pointer: fine) {
+  .lp,
+  .lp a,
+  .lp button {
+    cursor: none;
+  }
+  .lp-cursor-dot,
+  .lp-cursor-ring {
+    display: grid;
+  }
+}
+.lp-cursor-dot {
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  background: var(--lp-ink);
+  mix-blend-mode: difference;
+  background: #fff;
+}
+.lp-cursor-ring {
+  width: 44px;
+  height: 44px;
+  margin: -22px 0 0 -22px;
+  place-items: center;
+  border: 1px solid rgba(13, 13, 15, 0.55);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #fff;
+}
+.lp-cursor-ring span {
+  opacity: 0;
+  transition: opacity 0.2s;
+  font-weight: 600;
+}
+.lp-cursor-ring.is-label {
+  background: var(--lp-ink);
+  border-color: var(--lp-ink);
+}
+.lp-cursor-ring.is-label span {
+  opacity: 1;
+}
+
+/* line-mask reveals */
+.lp .mask {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.12em;
+  margin-bottom: -0.12em;
+}
+.lp .mask > span {
+  display: block;
+  will-change: transform;
+}
+.lp .word {
+  display: inline-block;
+  will-change: opacity;
+}
+
+/* buttons */
+.lp-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 56px;
+  padding: 0 28px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 15px;
+  overflow: hidden;
+  isolation: isolate;
+  transition: color 0.35s;
+}
+.lp-btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--lp-accent);
+  transform: translateY(101%);
+  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+  transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1), border-radius 0.55s;
+}
+.lp-btn:hover::before {
+  transform: translateY(0);
+  border-radius: 0;
+}
+.lp-btn--ink {
+  background: var(--lp-ink);
+  color: #fff;
+}
+.lp-btn--ghost {
+  border: 1px solid var(--lp-line);
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(10px);
+}
+.lp-btn--ghost::before {
+  background: var(--lp-ink);
+}
+.lp-btn--ghost:hover {
+  color: #fff;
+}
+
+/* nav pill */
+.lp-nav {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  z-index: 80;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px 8px 20px;
+  border-radius: 999px;
+  border: 1px solid var(--lp-line);
+  background: rgba(244, 242, 237, 0.72);
+  backdrop-filter: blur(16px) saturate(1.4);
+  box-shadow: 0 10px 40px -18px rgba(13, 13, 15, 0.35);
+  width: min(920px, calc(100vw - 24px));
+}
+.lp-nav a.link {
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 14px;
+  color: var(--lp-muted);
+  transition: background 0.25s, color 0.25s;
+}
+.lp-nav a.link:hover {
+  background: rgba(13, 13, 15, 0.06);
+  color: var(--lp-ink);
+}
+
+/* marquee */
+.lp-marquee {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+}
+.lp-marquee > div {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* browser frame for product screenshots */
+.lp-frame {
+  border-radius: 20px;
+  border: 1px solid var(--lp-line);
+  background: #fff;
+  box-shadow: 0 60px 120px -50px rgba(13, 13, 15, 0.55), 0 10px 30px -12px rgba(13, 13, 15, 0.25);
+  overflow: hidden;
+  transform-style: preserve-3d;
+}
+.lp-frame-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px;
+  background: #f1efe9;
+  border-bottom: 1px solid var(--lp-line);
+}
+.lp-frame-bar i {
+  width: 11px;
+  height: 11px;
+  border-radius: 99px;
+  background: rgba(13, 13, 15, 0.16);
+}
+.lp-frame-bar span {
+  margin-left: 14px;
+  flex: 1;
+  max-width: 320px;
+  height: 22px;
+  border-radius: 99px;
+  background: #fff;
+  border: 1px solid var(--lp-line);
+  font-size: 11px;
+  color: var(--lp-muted);
+  display: grid;
+  place-items: center;
+}
+.lp-frame img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* graph svg */
+.lp-edge {
+  fill: none;
+  stroke: rgba(13, 13, 15, 0.18);
+  stroke-width: 1.6;
+}
+.lp-edge.hot {
+  stroke: var(--lp-accent);
+  stroke-width: 2.4;
+  stroke-dasharray: 7 6;
+}
+.lp-node rect {
+  fill: #fff;
+  stroke: rgba(13, 13, 15, 0.2);
+  stroke-width: 1.2;
+}
+.lp-node text {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 11px;
+  fill: var(--lp-ink);
+}
+.lp-node.crown rect {
+  stroke: var(--lp-accent);
+  stroke-width: 2;
+}
+.lp-node.entry rect {
+  fill: #fff4e0;
+  stroke: var(--lp-warn);
+}
+@keyframes lp-flow {
+  to { stroke-dashoffset: -26; }
+}
+.lp-edge.hot.flowing {
+  animation: lp-flow 0.9s linear infinite;
+}
+
+/* faq */
+.lp-faq-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.lp-faq-body > div {
+  overflow: hidden;
+}
+.lp-faq-item[data-open="true"] .lp-faq-body {
+  grid-template-rows: 1fr;
+}
+.lp-faq-item[data-open="true"] .lp-plus {
+  transform: rotate(45deg);
+  background: var(--lp-ink);
+  color: #fff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-grain,
+  .lp-edge.hot.flowing {
+    animation: none;
+  }
+}
+
+/* mobile menu */
+.lp-burger {
+  display: none;
+  place-content: center;
+  gap: 6px;
+  width: 42px;
+  height: 42px;
+  margin-left: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--lp-line);
+  background: rgba(255, 255, 255, 0.6);
+}
+@media (max-width: 767px) {
+  .lp-burger { display: grid; }
+}
+.lp-burger span {
+  display: block;
+  width: 18px;
+  height: 1.5px;
+  background: var(--lp-ink);
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.lp-burger[aria-expanded="true"] span:first-child { transform: translateY(3.75px) rotate(45deg); }
+.lp-burger[aria-expanded="true"] span:last-child { transform: translateY(-3.75px) rotate(-45deg); }
+.lp-menu {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 96px 28px 40px;
+  background: var(--lp-bg);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-12px);
+  transition: opacity 0.35s, transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.lp-menu[data-open="true"] {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+.lp-menu > a:not(.lp-btn) {
+  font-size: clamp(34px, 10vw, 56px);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--lp-line);
+}
+@media (min-width: 768px) {
+  .lp-menu { display: none; }
+}
