@@ -85,6 +85,20 @@ def _trivy_findings(t: TrivyIn) -> list[FindingIn]:
     return out
 
 
+def normalize_edges(spec: ImportSpec) -> list[tuple[str, str]]:
+    """Drop repeated edges, self-loops and `internet -> host` edges already implied by `exposed: true`. A duplicate edge
+    would otherwise be walked twice and double-count every attack path through it."""
+    exposed = {h.id for h in spec.hosts if h.exposed}
+    seen: set[tuple[str, str]] = set()
+    out: list[tuple[str, str]] = []
+    for a, b in spec.edges:
+        if a == b or (a, b) in seen or (a == "internet" and b in exposed):
+            continue
+        seen.add((a, b))
+        out.append((a, b))
+    return out
+
+
 def build(spec: ImportSpec) -> dict[str, int]:
     """Write the CURRENT graph (selected by the caller) from the spec. Returns counts for the response."""
     findings = [*spec.findings, *(f for t in spec.trivy for f in _trivy_findings(t))]
@@ -101,7 +115,6 @@ def build(spec: ImportSpec) -> dict[str, int]:
          "product": f.product or "", "summary": f.summary or ""}
         for i, f in enumerate(unique)
     ]
-    importer.load_workspace(
-        [h.model_dump() for h in spec.hosts], [s.model_dump() for s in spec.datastores], list(spec.edges), rows
-    )
-    return {"hosts": len(spec.hosts), "datastores": len(spec.datastores), "edges": len(spec.edges), "findings": len(rows)}
+    edges = normalize_edges(spec)
+    importer.load_workspace([h.model_dump() for h in spec.hosts], [s.model_dump() for s in spec.datastores], edges, rows)
+    return {"hosts": len(spec.hosts), "datastores": len(spec.datastores), "edges": len(edges), "findings": len(rows)}

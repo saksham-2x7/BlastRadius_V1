@@ -89,3 +89,21 @@ def test_workspaces_and_memory_are_isolated_per_user():
 def test_github_filing_is_a_noop_without_configuration():
     r = t.file_github_issue("F4")
     assert r.filed is False and "not configured" in r.message
+
+
+def test_redundant_internet_edges_do_not_double_count_paths():
+    """Regression: listing `internet -> host` for a host already marked `exposed` used to double every path through it."""
+    spec = {
+        "hosts": [{"id": "vpn", "exposed": True}, {"id": "app"}],
+        "datastores": [{"id": "db", "crown": True}],
+        "edges": [["internet", "vpn"], ["vpn", "app"], ["vpn", "app"], ["app", "db"]],
+        "findings": [{"host": "vpn", "cve": "CVE-2022-40684", "cvss": 9.8}, {"host": "app", "cve": "CVE-2021-44228", "cvss": 10.0}],
+    }
+    mine = db.use_graph(db.workspace_graph(f"it-{uuid.uuid4().hex[:8]}"))
+    try:
+        counts = ingest.build(ingest.ImportSpec.model_validate(spec))
+        assert counts["edges"] == 2
+        assert engine.scan()["summary"]["paths"] == 1
+    finally:
+        db.delete_graph()
+        db.reset_graph(mine)
