@@ -1,0 +1,14 @@
+# Used automatically with `docker build -f backend/Dockerfile .` (keeps the huge/unneeded folders out of the build context)
+.git
+frontend
+keys
+.github
+**/node_modules
+**/.next
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.env
+**/.env.local
+**/*.local.txt
+**/*.egg-info
