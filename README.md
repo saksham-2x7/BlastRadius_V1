@@ -89,8 +89,15 @@ cd frontend && npm install && npm run dev                                  # 3) 
 - **Railway, backend service:** Settings → Source → **clear the Root Directory** (repo root) and set the **config file path** to `backend/railway.json`. Env vars: `keys/backend.env.example`.
 - **Railway, database service:** Docker image `falkordb/falkordb:latest`, a volume at `/var/lib/falkordb/data`, no public domain. Env vars: `keys/database.env.example`.
 
-## AI disclosure
-Built with AI coding assistants (Claude Code). All code was reviewed by the team.
+## AI Disclosure
+Developed with AI coding assistance (Claude Code) for boilerplate and testing. All graph data modeling, Cypher queries, MCP tool implementations, and autonomy tier architecture were designed, reviewed, and verified by the team.
+
+# BlastRadius 🛡️
+> Graph-native, autonomous AI vulnerability remediation powered by FalkorDB and Model Context Protocol (MCP).
+
+🚀 **Live App**: [blastradius-ashy.vercel.app](https://blastradius-ashy.vercel.app)  
+📝 **Engineering Deep Dive**: [Read on DEV.to](https://dev.to/kaustubh_negi/-blastradius-why-severity-scores-lie-and-how-graph-ai-solves-real-attack-paths-4846)  
+🎥 **Demo Video**: [Watch on YouTube](https://youtu.be/IauSZKEO8PQ)
 
 ## License
 MIT. See [LICENSE](LICENSE).
