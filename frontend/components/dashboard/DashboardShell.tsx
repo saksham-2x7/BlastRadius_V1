@@ -176,6 +176,13 @@ export default function DashboardShell({ user, initial, mock }: { user: User; in
   }, [say]);
 
   const ownWorkspace = scan?.workspace === "own";
+  // The advisor's route stays on the graph only while it is still an attack path: fix a host on it and it disappears.
+  const liveRoutes = useMemo(() => {
+    if (!agentRoutes || !scan) return null;
+    const live = new Set(scan.paths.map((p) => p.join(">")));
+    const keep = agentRoutes.filter((r) => live.has(r.join(">")));
+    return keep.length ? keep : null;
+  }, [agentRoutes, scan]);
 
   const importData = useCallback(
     async (payload: unknown): Promise<string | null> => {
@@ -396,9 +403,9 @@ export default function DashboardShell({ user, initial, mock }: { user: User; in
                   <p className="font-mono text-xs text-muted">
                     {scanned ? "attack graph · live from FalkorDB" : "your network · run a scan to reveal attack paths"}
                   </p>
-                  {agentRoutes && (
+                  {liveRoutes && (
                     <button onClick={() => setAgentRoutes(null)} className="rounded-full border border-blue-600/40 bg-blue-600/10 px-2.5 py-0.5 font-mono text-[11px] text-blue-700 hover:bg-blue-600/20">
-                      advisor route · {agentRoutes.length} shown · clear ×
+                      advisor route · {liveRoutes.length} shown · clear ×
                     </button>
                   )}
                   {scanned && (
@@ -408,7 +415,7 @@ export default function DashboardShell({ user, initial, mock }: { user: User; in
                   )}
                 </div>
                 <div className="mt-2 h-[700px] overflow-hidden rounded-2xl border border-line bg-bg">
-                  {graphView && <AttackGraph nodes={graphView.nodes} edges={graphView.edges} revealKey={revealKey} agentRoutes={agentRoutes} />}
+                  {graphView && <AttackGraph nodes={graphView.nodes} edges={graphView.edges} revealKey={revealKey} agentRoutes={liveRoutes} />}
                 </div>
                 {(refreshing || busyFix) && (
                   <div className="pointer-events-none absolute inset-0 grid place-items-center rounded-2xl bg-bg/40 backdrop-blur-[1px]">

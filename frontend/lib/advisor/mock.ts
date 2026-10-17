@@ -115,7 +115,7 @@ export const mockProvider: AdvisorProvider = {
       if (!ck.value) return void (yield* say("I couldn't run the graph algorithm. Is the engine running?", signal));
       yield* say(
         `Ranked by live attack paths, with FalkorDB's betweenness-centrality and PageRank algorithms as the structural signal:\n\n` +
-          ck.value.ranking.map((h, i) => `${i + 1}. \`${h.host}\`: betweenness ${h.betweenness}, PageRank ${h.pagerank}, ${h.attack_paths} live attack ${h.attack_paths === 1 ? "path" : "paths"}`).join("\n") +
+          ck.value.ranking.map((h, i) => `${i + 1}. \`${h.host}\`${h.is_choke_point ? " (choke point)" : " (high-exposure host)"}: betweenness ${h.betweenness}, PageRank ${h.pagerank}, ${h.attack_paths} live attack ${h.attack_paths === 1 ? "path" : "paths"}`).join("\n") +
           `\n\n${ck.value.note}`,
         signal
       );
@@ -126,9 +126,11 @@ export const mockProvider: AdvisorProvider = {
       yield* call("explain_attack_path", { routes: 3 }, ex);
       if (!ex.value) return void (yield* say("I couldn't compute the routes. Is the engine running?", signal));
       yield* say(
-        `Shortest routes from the internet to the crown jewel (FalkorDB shortest-path algorithm):\n\n` +
-          ex.value.routes.map((r) => `• ${r.route.join(" → ")} (${r.hops} hops, ${r.still_exploitable ? "still exploitable" : "already cut"})`).join("\n") +
-          `\n\n${ex.value.note}`,
+        ex.value.routes.length
+          ? `Shortest routes that are still exploitable (FalkorDB shortest-path algorithm):\n\n` +
+              ex.value.routes.map((r) => `• ${r.route.join(" → ")} (${r.hops} hops)`).join("\n") +
+              `\n\n${ex.value.note}`
+          : ex.value.note,
         signal
       );
       return;

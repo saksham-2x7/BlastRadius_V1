@@ -254,6 +254,7 @@ class ChokeHost(BaseModel):
     betweenness: float = Field(description="FalkorDB algo.betweenness score over the CAN_REACH network (higher = more routes pass through).")
     pagerank: float = Field(default=0.0, description="FalkorDB algo.pageRank score: how much of the network's reachability flows into this host.")
     attack_paths: int = Field(ge=0, description="Live internet-to-crown-jewel paths through this host.")
+    is_choke_point: bool = Field(description="True only for the host(s) carrying the MOST live attack paths (the dashboard marks exactly these). Other rows are high-exposure hosts, not choke points.")
     software: str | None
 
 
@@ -275,6 +276,8 @@ class Route(BaseModel):
 
 class ExplainOutput(BaseModel):
     method: str
+    shortest_hops: int = Field(ge=0, description="Length of the shortest route that is still exploitable (0 if none remains).")
+    tied_routes: int = Field(ge=0, description="How many routes share that shortest length. Ties are normal; routes shows the most exposed ones.")
     routes: list[Route]
     note: str
 
@@ -423,24 +426,42 @@ def get_choke_points(limit: int = 5) -> ChokePointsOutput:
     except Exception:  # an algorithm hiccup must never break the tool
         pr = {}
     ranking = [ChokeHost(host=h, betweenness=round(sc, 3), pagerank=round(pr.get(h, 0.0), 3), attack_paths=info[h]["paths"],
-                         software=info[h].get("software"))
+                         is_choke_point=bool(info[h]["choke"]), software=info[h].get("software"))
                for h, sc in scores[:limit]]
     return ChokePointsOutput(
         method="Ranked by live attack paths; FalkorDB algo.betweenness and algo.pageRank on the CAN_REACH graph give the structural centrality",
         ranking=ranking,
-        note="Hosts on the most live attack paths come first; betweenness and PageRank show how central each host is in the network. "
+        note="Only rows with is_choke_point=true are choke points (the host(s) on the most live attack paths); the other rows are "
+             "high-exposure hosts ranked by live attack paths, with betweenness and PageRank showing how central each host is. "
              "A host with high centrality but 0 attack paths is structurally central but not currently exploitable.",
     )
 
 
 def explain_attack_path(routes: int = 3) -> ExplainOutput:
-    """Shortest routes from the internet to the crown jewel (FalkorDB algo.SPpaths), flagged by live exploitability."""
-    live = {tuple(p) for p in engine.scan()["paths"]}
-    found = [r[0] for r in run(SHORTEST, {"n": routes})]
+    """Shortest STILL-EXPLOITABLE routes from the internet to the crown jewel. Candidates come from FalkorDB's k-shortest-path
+    algorithm (algo.SPpaths) and are filtered to routes whose every hop still carries an unpatched exploitable finding, so a
+    route you already cut is never shown. Equal-length routes tie; they are ordered by how exposed their hosts are, then by
+    name, so the answer is deterministic."""
+    scan = engine.scan()
+    live = [tuple(p) for p in scan["paths"]]
+    live_set = set(live)
+    load = {n["id"]: n["paths"] for n in scan["nodes"]}
+    cands = [tuple(r[0]) for r in run(SHORTEST, {"n": 12})]
+    pool = [p for p in cands if p in live_set] or live  # fall back to the live attack paths if none of the k candidates is live
+    method = "FalkorDB algo.SPpaths (k shortest) filtered to routes that are still exploitable"
+    if not pool:
+        return ExplainOutput(method=method, shortest_hops=0, tied_routes=0, routes=[],
+                             note="No attack route to a crown jewel remains: every route is already cut.")
+    shortest = min(len(p) for p in pool)
+    tied = [p for p in pool if len(p) == shortest]
+    tied.sort(key=lambda p: (-sum(load.get(h, 0) for h in p[1:-1]), p))
+    shown = tied[:routes]
+    hops = shortest - 1
     return ExplainOutput(
-        method="FalkorDB algo.SPpaths from Internet to the crown jewel over CAN_REACH",
-        routes=[Route(hops=len(p) - 1, route=p, still_exploitable=tuple(p) in live) for p in found],
-        note="Routes come from the network graph; still_exploitable says whether every hop still carries an unpatched exploitable finding.",
+        method=method, shortest_hops=hops, tied_routes=len(tied),
+        routes=[Route(hops=hops, route=list(p), still_exploitable=True) for p in shown],
+        note=(f"{len(tied)} still-exploitable route{'s' if len(tied) != 1 else ''} tie at {hops} hops; showing the {len(shown)} through the "
+              "most exposed hosts. Equal length means no one of them is 'the' shortest."),
     )
 
 
@@ -542,8 +563,9 @@ TOOLS: dict[str, ToolDef] = {
         SimulateInput, SimulateOutput, lambda i: simulate_fix(i.finding_id),
     ),
     "get_choke_points": ToolDef(
-        "Rank hosts by FalkorDB betweenness centrality (how many routes pass through them) joined with live attack-path "
-        "counts. Use it to decide where one fix cuts the most routes.",
+        "Rank exposed hosts by live attack paths, with FalkorDB betweenness and PageRank centrality alongside. Only hosts "
+        "with is_choke_point=true are choke points (the host(s) on the most live paths); call the rest high-exposure hosts. "
+        "Use it to decide where one fix cuts the most routes.",
         ChokeInput, ChokePointsOutput, lambda i: get_choke_points(i.limit),
     ),
     "explain_attack_path": ToolDef(

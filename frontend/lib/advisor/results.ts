@@ -53,12 +53,14 @@ export interface SimulateResult {
 
 export interface ChokeResult {
   method: string;
-  ranking: { host: string; betweenness: number; pagerank: number; attack_paths: number; software: string | null }[];
+  ranking: { host: string; betweenness: number; pagerank: number; attack_paths: number; is_choke_point: boolean; software: string | null }[];
   note: string;
 }
 
 export interface ExplainResult {
   method: string;
+  shortest_hops: number;
+  tied_routes: number;
   routes: { hops: number; route: string[]; still_exploitable: boolean }[];
   note: string;
 }

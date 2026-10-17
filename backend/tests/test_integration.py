@@ -36,8 +36,27 @@ def test_sample_story_four_paths_and_choke_point():
 def test_algorithm_tools_return_routes_and_centrality():
     top = t.get_choke_points(3).ranking[0]
     assert top.betweenness > 0 and top.pagerank >= 0
-    routes = t.explain_attack_path(3).routes
-    assert routes and all(r.route[0] == "internet" and r.route[-1] == "db-customers" for r in routes)
+    out = t.explain_attack_path(3)
+    assert out.routes and all(r.route[0] == "internet" and r.route[-1] == "db-customers" for r in out.routes)
+
+
+def test_only_the_real_choke_point_is_flagged_as_one():
+    rows = t.get_choke_points(5).ranking
+    assert [r.host for r in rows if r.is_choke_point] == ["api-gateway"]  # edge-apache and worker-java are just high-exposure hosts
+
+
+def test_routes_tie_deterministically_and_never_include_cut_routes():
+    first = t.explain_attack_path(5)
+    assert first.shortest_hops == 3 and first.tied_routes == 4  # nginx, apache (x2) and node routes all tie at 3 hops
+    assert [r.route for r in first.routes] == [r.route for r in t.explain_attack_path(5).routes]  # same answer every time
+    engine.apply_fix("F3", "auto")  # cuts the edge-node route
+    engine.apply_fix("F1", "auto")  # cuts the edge-nginx route
+    later = t.explain_attack_path(5)
+    assert all(r.still_exploitable for r in later.routes)
+    assert all(r.route[1] not in ("edge-node", "edge-nginx") for r in later.routes)  # routes through fixed hosts are gone
+    engine.apply_fix("F4", "approved")
+    engine.apply_fix("F2", "auto")
+    assert t.explain_attack_path(3).routes == []  # all four fixes in the pitch: no route remains
 
 
 def test_agent_refuses_approval_tier_and_applies_auto_tier():

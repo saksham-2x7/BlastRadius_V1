@@ -33,11 +33,12 @@ export function summarize(name: string, result: unknown): string {
     }
     case "get_choke_points": {
       const r = result as ChokeResult;
-      return `FalkorDB centrality (betweenness): ${r.ranking.slice(0, 3).map((h) => `${h.host} ${h.betweenness}`).join(" · ")}`;
+      const chokes = r.ranking.filter((h) => h.is_choke_point).map((h) => h.host);
+      return `${chokes.length ? `choke point: ${chokes.join(", ")}` : "no choke point"} · top exposure: ${r.ranking.slice(0, 3).map((h) => `${h.host} (${h.attack_paths} paths, betweenness ${h.betweenness})`).join(" · ")}`;
     }
     case "explain_attack_path": {
       const r = result as ExplainResult;
-      return `${r.routes.length} shortest route${r.routes.length === 1 ? "" : "s"} · ${r.routes.filter((x) => x.still_exploitable).length} still exploitable`;
+      return r.routes.length ? `${r.tied_routes} route${r.tied_routes === 1 ? "" : "s"} tie at ${r.shortest_hops} hops · showing ${r.routes.length}, all still exploitable` : "no exploitable route remains";
     }
     case "apply_safe_fix": {
       const r = result as ApplyResult;
