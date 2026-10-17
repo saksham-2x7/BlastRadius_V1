@@ -48,9 +48,6 @@ MATCH (s:Internet), (t:DataStore {crown: true})
 CALL algo.SPpaths({sourceNode: s, targetNode: t, relationshipTypes: ['CAN_REACH'], pathCount: $n}) YIELD path
 ```
 
-### What was built during the event
-The agent's *action* tool with the graph-decided safety tier, FalkorDB algorithm tools (betweenness, shortest paths), persistent graph memory, the idle auto-restore of the shared demo graph, the full UI/landing/dashboard redesign, and the fixes listed in the git history.
-
 ### Run it
 See "Run locally" below. Data: synthetic topology with real CVE ids; KEV and EPSS are live public feeds; CVSS is a snapshot. Tests (66): backend 33 (`cd backend && pip install -r requirements.txt pytest && pytest`) and frontend 33 (`cd frontend && npm test`). Backend unit tests cover the safety tiers, import validation and edge de-duplication, and the live-feed client with the network mocked; integration tests (run in CI against a real FalkorDB service) cover the agent's tools and refusals, the pitch story (4 paths to 0), per-user graphs and per-tenant memory. Frontend tests cover the engine client and its error mapping, signed checkout tokens, subscription handling and the advisor providers. Demo script: [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md). Blog post: [docs/BLOG.md](docs/BLOG.md). Demo video: add the link here before submitting.
 
