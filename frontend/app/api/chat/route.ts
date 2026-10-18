@@ -2,7 +2,7 @@ import { getProvider, mcpToolSource } from "@/lib/advisor";
 import { CHAT_LIMITS, type AdvisorEvent, type ChatMessage } from "@/lib/advisor/types";
 import { currentUser, fail, unauthorized } from "@/lib/session";
 import { workspaceHeaders } from "@/lib/workspace";
-import type { ExplainResult } from "@/lib/advisor/results";
+import type { CutResult, ExplainResult } from "@/lib/advisor/results";
 import type { ToolSource } from "@/lib/advisor/tools";
 
 // Streaming answers (tool calls + LLM) can take 10-30 s; allow up to 60 s on Vercel.
@@ -56,11 +56,13 @@ export async function POST(req: Request) {
   const rawTools = mcpToolSource((await workspaceHeaders(user.id)) ? user.id : undefined);
   // Remember the structured result of explain_attack_path so the UI can draw the cited route on the graph.
   let lastRoutes: string[][] | undefined;
+  let lastCut: [string, string][] | undefined;
   const tools: ToolSource = {
     list: () => rawTools.list(),
     call: async (name, args) => {
       const result = await rawTools.call(name, args);
       if (name === "explain_attack_path") lastRoutes = (result as ExplainResult).routes.map((r) => r.route);
+      if (name === "suggest_network_cut") lastCut = (result as CutResult).cut.map((e) => [e.source, e.target]);
       return result;
     },
     close: () => rawTools.close(),
@@ -81,7 +83,9 @@ export async function POST(req: Request) {
       };
       try {
         for await (const event of provider.stream(messages, tools, abort.signal)) {
-          send(event.type === "tool_result" && event.ok && event.name === "explain_attack_path" && lastRoutes ? { ...event, routes: lastRoutes } : event);
+          if (event.type === "tool_result" && event.ok && event.name === "explain_attack_path" && lastRoutes) send({ ...event, routes: lastRoutes });
+          else if (event.type === "tool_result" && event.ok && event.name === "suggest_network_cut" && lastCut) send({ ...event, cut: lastCut });
+          else send(event);
         }
         send({ type: "done" });
       } catch (err) {

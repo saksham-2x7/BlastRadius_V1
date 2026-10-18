@@ -59,6 +59,7 @@ flowchart LR
 | Acts in the real workflow | `draft_fix_ticket` writes a ready-to-file GitHub or Jira ticket from graph evidence (paths, KEV, EPSS, simulated impact, rollback). `file_github_issue` files it as a real GitHub issue when the deployment opts in (`GITHUB_TOKEN`, `GITHUB_REPO`), capped at 5/hour, only when the user asks |
 | A fix you can run | `generate_remediation_playbook` (and the **Download remediation playbook** button) exports the decided fixes as an Ansible playbook with a rollback path, using fixed versions looked up live from OSV (newest fixed release per package). BlastRadius never touches your servers: you review it and run it with `--check --diff` first |
 | Human in the loop, in the graph | When the agent refuses a high-risk fix it opens `(:ApprovalRequest {status: 'pending'})`; `escalate_to_human` posts to the team's webhook (opt-in, https only, rate limited, URL from deployment config only); a human approving in the dashboard closes it; `list_pending_approvals` shows what is still waiting |
+| Network segmentation (min cut) | `suggest_network_cut` finds the fewest connections to cut so no route reaches a crown jewel: a minimum edge cut over the live attack paths, cross-checked against FalkorDB `algo.maxFlow` (both agree on the sample: 2). Drawn in amber on the graph. A network team can do this today while patches wait for approval |
 | Blast zone (algorithm tool) | `get_blast_zone` = FalkorDB `algo.BFS`: what an attacker can reach after compromising one host, and whether a crown jewel is inside |
 | Your real infrastructure | **Terraform import:** paste the output of `terraform show -json` and the converter (`backend/tfimport.py`) turns it into hosts, data stores and reachability: load balancers and instances are hosts, databases are crown jewels, security-group rules decide who can reach whom (`0.0.0.0/0` = exposed to the internet). A dashboard example is one click away |
 | Your own data | "Use your own data" in the dashboard imports an inventory (hosts, data stores, reachability, findings, optional Trivy or Grype JSON) into a **private FalkorDB graph per user** (`ws_<hash>`). Every query and agent tool then runs on it unchanged; the shared sample is untouched. `POST /api/import`, validated and size-capped (`backend/ingest.py`) |
@@ -85,6 +86,9 @@ RETURN [n IN nodes(p) | n.id]
 // what-if: same query with a finding treated as patched (backend/threat_tools.py, SIM_PATHS)
 // choke points: FalkorDB betweenness centrality
 CALL algo.betweenness({nodeLabels: ['Internet','Host','DataStore'], relationshipTypes: ['CAN_REACH']}) YIELD node, score
+// segmentation: edge-disjoint routes from the internet to the crown jewels (the minimum cut has this many edges)
+MATCH (s:Internet) MATCH (t:DataStore {crown: true}) WITH s, collect(t) AS ts
+CALL algo.maxFlow({sourceNodes: [s], targetNodes: ts, relationshipTypes: ['CAN_REACH'], capacityProperty: 'cap'}) YIELD maxFlow
 // blast zone: what is reachable from a compromised host
 MATCH (s:Host {id: $h}) CALL algo.BFS(s, 6, 'CAN_REACH') YIELD nodes RETURN [n IN nodes | n.id]
 // shortest routes to the crown jewel
@@ -106,7 +110,7 @@ Measured with `backend/scripts/scale_benchmark.py` against a local FalkorDB (Doc
 Imports are capped at 500 hosts, 2,000 edges and 1,000 findings per workspace and rate-limited (10 per hour per user); path search is bounded to 6 hops.
 
 ### Run it
-See "Run locally" below. Data: synthetic topology with real CVE ids; KEV and EPSS are live public feeds; CVSS is a snapshot. Tests (97): backend 64 (`cd backend && pip install -r requirements.txt pytest && pytest`) and frontend 33 (`cd frontend && npm test`). Backend unit tests cover the safety tiers, import validation and edge de-duplication, the live-feed clients (KEV/EPSS/NVD) with the network mocked, Grype/Trivy mapping, approvals and the escalation webhook; integration tests (run in CI against a real FalkorDB service) cover the agent's tools and refusals, the pitch story (4 paths to 0), per-user graphs and per-tenant memory. Frontend tests cover the engine client and its error mapping, signed checkout tokens, subscription handling and the advisor providers. Demo script: [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md). Blog post: [docs/BLOG.md](docs/BLOG.md).
+See "Run locally" below. Data: synthetic topology with real CVE ids; KEV and EPSS are live public feeds; CVSS is a snapshot. Tests (102): backend 69 (`cd backend && pip install -r requirements.txt pytest && pytest`) and frontend 33 (`cd frontend && npm test`). Backend unit tests cover the safety tiers, import validation and edge de-duplication, the live-feed clients (KEV/EPSS/NVD) with the network mocked, Grype/Trivy mapping, approvals and the escalation webhook; integration tests (run in CI against a real FalkorDB service) cover the agent's tools and refusals, the pitch story (4 paths to 0), per-user graphs and per-tenant memory. Frontend tests cover the engine client and its error mapping, signed checkout tokens, subscription handling and the advisor providers. Demo script: [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md). Blog post: [docs/BLOG.md](docs/BLOG.md).
 
 ## The four parts (work on one without touching the others)
 

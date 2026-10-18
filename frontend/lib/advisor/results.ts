@@ -135,3 +135,11 @@ export interface PlaybookResult {
   note: string;
   memory_id: string;
 }
+
+export interface CutResult {
+  paths_now: number;
+  cut: { source: string; target: string; attack_paths: number }[];
+  method: string;
+  structural_edge_disjoint_routes: number | null;
+  note: string;
+}

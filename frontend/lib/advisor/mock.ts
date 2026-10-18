@@ -3,7 +3,7 @@ import type { AdvisorProvider } from "./provider";
 import type { AdvisorEvent } from "./types";
 import { summarize, toolErrorMessage, type ToolSource } from "./tools";
 import { fmtEpssText } from "./format";
-import type { ApplyResult, AttackPathsResult, ChokeResult, ContextResult, ExplainResult, RankedFinding, RecallResult, SimulateResult, TicketResult, FileResult, EscalateResult, PendingResult, BlastZoneResult, PlaybookResult } from "./results";
+import type { ApplyResult, AttackPathsResult, ChokeResult, ContextResult, ExplainResult, RankedFinding, RecallResult, SimulateResult, TicketResult, FileResult, EscalateResult, PendingResult, BlastZoneResult, PlaybookResult, CutResult } from "./results";
 
 /**
  * Mock "LLM": picks tools with simple keyword rules and writes its answer from REAL tool results (templated text).
@@ -48,6 +48,22 @@ export const mockProvider: AdvisorProvider = {
 
     await sleep(250, signal);
     const ref = q.match(REF)?.[1]?.toUpperCase();
+
+    // 0i) network segmentation (minimum cut)
+    if (/segment|network cut|min.?cut|isolate|firewall|disconnect|cut (the )?connection|which connections/.test(lower)) {
+      const ct: { value?: CutResult } = {};
+      yield* call("suggest_network_cut", {}, ct);
+      if (!ct.value) return void (yield* say("I couldn't compute the cut. Is the engine running?", signal));
+      yield* say(
+        ct.value.cut.length
+          ? `The fewest connections to cut so nothing reaches a crown jewel (${ct.value.cut.length}):\n\n` +
+              ct.value.cut.map((e) => `• \`${e.source}\` → \`${e.target}\` (used by ${e.attack_paths} live ${e.attack_paths === 1 ? "path" : "paths"})`).join("\n") +
+              `\n\n${ct.value.note}\nThey are drawn in amber on the graph.`
+          : ct.value.note,
+        signal
+      );
+      return;
+    }
 
     // 0h) real-world handoff: remediation playbook
     if (/playbook|ansible|runbook|remediation (script|plan)|patch plan/.test(lower)) {
@@ -314,7 +330,7 @@ export const mockProvider: AdvisorProvider = {
     }
 
     yield* say(
-      "I can analyse your attack graph. Try:\n\n• Which vulnerability should I patch first?\n• Which findings are in CISA KEV?\n• What if I patch <finding id>?\n• Fix everything that is safe\n• Where is the choke point?\n• Draft a Jira ticket for the top finding\n• What can an attacker reach from api-gateway?\n• Ask a human to approve the risky ones\n• Export an Ansible playbook for the fixes\n• What did you do earlier?",
+      "I can analyse your attack graph. Try:\n\n• Which vulnerability should I patch first?\n• Which findings are in CISA KEV?\n• What if I patch <finding id>?\n• Fix everything that is safe\n• Where is the choke point?\n• Draft a Jira ticket for the top finding\n• What can an attacker reach from api-gateway?\n• Ask a human to approve the risky ones\n• Export an Ansible playbook for the fixes\n• Which connections should we cut?\n• What did you do earlier?",
       signal
     );
   },

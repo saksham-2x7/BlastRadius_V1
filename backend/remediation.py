@@ -123,6 +123,10 @@ def build_playbook(fixes: list[dict[str, Any]]) -> str:
             elif eco.split(" ")[0] in OS_ECOSYSTEMS or eco in OS_ECOSYSTEMS:
                 fix_t = ("ansible.builtin.package", f"{{ name: {_q(short)}, state: latest }}")
                 back_t = ("ansible.builtin.package", f"{{ name: \"{short}={{{{ previous_versions['{short}'] }}}}\", state: present }}")
+            elif eco == "Bitnami":
+                msg = f"Upgrade the Bitnami container image or chart for {short} to a release shipping {short} >= {ver}, then redeploy."
+                fix_t = ("ansible.builtin.debug", f"{{ msg: {_q(msg)} }}")
+                back_t = None
             else:
                 msg = f"Upgrade {pkg} to >= {ver} ({eco}) in your build file, then rebuild and redeploy."
                 fix_t = ("ansible.builtin.debug", f"{{ msg: {_q(msg)} }}")

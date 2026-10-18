@@ -141,5 +141,10 @@ async def generate_remediation_playbook(
     return await anyio.to_thread.run_sync(t.generate_remediation_playbook, scope)
 
 
+@mcp.tool(name="suggest_network_cut", description=t.TOOLS["suggest_network_cut"].description, annotations=READ_ONLY)
+async def suggest_network_cut() -> t.CutOutput:
+    return await anyio.to_thread.run_sync(t.suggest_network_cut)
+
+
 if __name__ == "__main__":
     mcp.run()  # stdio
