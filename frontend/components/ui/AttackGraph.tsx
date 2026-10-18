@@ -193,7 +193,7 @@ function layout(nodes: GraphNode[], edges: GraphEdge[]): { nodes: Node[]; depth:
   return { nodes: out, depth };
 }
 
-function toEdges(edges: GraphEdge[], depth: Map<string, number>, underlay = false, agent: ReadonlySet<string> = new Set()): Edge[] {
+function toEdges(edges: GraphEdge[], depth: Map<string, number>, underlay = false, agent: ReadonlySet<string> = new Set(), cut: ReadonlySet<string> = new Set()): Edge[] {
   const out: Edge[] = [];
   for (const e of edges.filter((x) => x.type === "CAN_REACH")) {
     const id = `${e.source}>${e.target}`;
@@ -207,6 +207,20 @@ function toEdges(edges: GraphEdge[], depth: Map<string, number>, underlay = fals
         markerEnd: { type: MarkerType.ArrowClosed, color: "#b3ad9f", width: 16, height: 16 },
         zIndex: 0,
       });
+    }
+    if (cut.has(id)) {
+      out.push({
+        id,
+        source: e.source,
+        target: e.target,
+        animated: false,
+        style: { stroke: "#d97706", strokeWidth: 4.5, strokeDasharray: "7 5", filter: "drop-shadow(0 0 5px rgba(217,119,6,0.55))" },
+        markerEnd: { type: MarkerType.ArrowClosed, color: "#d97706", width: 18, height: 18 },
+        label: "cut",
+        labelStyle: { fill: "#b45309", fontWeight: 700, fontSize: 12 },
+        zIndex: 22,
+      });
+      continue;
     }
     if (agent.has(id)) {
       out.push({
@@ -246,7 +260,7 @@ const NODE_LAG = 0.85;
  * the column of its source), so no arrow is ever re-rendered or restarted. Hosts and findings light up a moment after
  * the arrow reaches them. When the timeline ends the grey underlays go away and it is the normal live graph.
  */
-export default function AttackGraph({ nodes, edges, revealKey = 0, agentRoutes = null }: { nodes: GraphNode[]; edges: GraphEdge[]; revealKey?: number; agentRoutes?: string[][] | null }) {
+export default function AttackGraph({ nodes, edges, revealKey = 0, agentRoutes = null, cutEdges = null }: { nodes: GraphNode[]; edges: GraphEdge[]; revealKey?: number; agentRoutes?: string[][] | null; cutEdges?: [string, string][] | null }) {
   const laid = useMemo(() => layout(nodes, edges), [nodes, edges]);
   const maxDepth = useMemo(() => Math.max(1, ...laid.depth.values()), [laid.depth]);
 
@@ -267,7 +281,8 @@ export default function AttackGraph({ nodes, edges, revealKey = 0, agentRoutes =
   const rfNodes = laid.nodes; // stable objects: replacing them would make React Flow re-measure and briefly drop their arrows
   const routeEdges = useMemo(() => new Set((agentRoutes ?? []).flatMap((r) => r.slice(0, -1).map((a, i) => `${a}>${r[i + 1]}`))), [agentRoutes]);
   const routeNodes = useMemo(() => new Set((agentRoutes ?? []).flat()), [agentRoutes]);
-  const rfEdges = useMemo(() => toEdges(edges, laid.depth, revealing, routeEdges), [edges, laid.depth, revealing, routeEdges]);
+  const cutSet = useMemo(() => new Set((cutEdges ?? []).map(([a, b]) => `${a}>${b}`)), [cutEdges]);
+  const rfEdges = useMemo(() => toEdges(edges, laid.depth, revealing, routeEdges, cutSet), [edges, laid.depth, revealing, routeEdges, cutSet]);
 
   return (
     <RevealCtx.Provider value={nodeStage}>

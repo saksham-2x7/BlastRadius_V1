@@ -57,6 +57,7 @@ export default function DashboardShell({ user, initial, mock }: { user: User; in
   const [advisorOpen, setAdvisorOpen] = useState(false);
   const [confirmRestore, setConfirmRestore] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [agentCut, setAgentCut] = useState<[string, string][] | null>(null); // connections the advisor suggests cutting
   const [agentRoutes, setAgentRoutes] = useState<string[][] | null>(null); // routes the advisor just cited, drawn on the graph
   // First visit shows only the topology and a "run scan" prompt; results appear after the first scan.
   const [scannedNow, setScannedNow] = useState<boolean>("scan" in initial && (initial.scan.summary.patched > 0 || initial.scan.history.length > 0));
@@ -166,6 +167,7 @@ export default function DashboardShell({ user, initial, mock }: { user: User; in
     setScan(r.data);
     // Back to the first-visit state: hide results, forget the first scan, reset the scan panel.
     setAgentRoutes(null);
+      setAgentCut(null);
     setScannedNow(false);
     setShowAll(false);
     setScanKey((k) => k + 1);
@@ -177,6 +179,12 @@ export default function DashboardShell({ user, initial, mock }: { user: User; in
 
   const ownWorkspace = scan?.workspace === "own";
   // The advisor's route stays on the graph only while it is still an attack path: fix a host on it and it disappears.
+  const liveCut = useMemo(() => {
+    if (!agentCut || !scan) return null;
+    const used = new Set(scan.paths.flatMap((p) => p.slice(0, -1).map((a, i) => `${a}>${p[i + 1]}`)));
+    const keep = agentCut.filter(([a, b]) => used.has(`${a}>${b}`)); // a connection nobody can use any more is no longer worth cutting
+    return keep.length ? keep : null;
+  }, [agentCut, scan]);
   const liveRoutes = useMemo(() => {
     if (!agentRoutes || !scan) return null;
     const live = new Set(scan.paths.map((p) => p.join(">")));
@@ -194,6 +202,7 @@ export default function DashboardShell({ user, initial, mock }: { user: User; in
       setError(null);
       setScan(r.data.scan);
       setAgentRoutes(null);
+      setAgentCut(null);
       setScannedNow(false);
       setShowAll(false);
       setScanKey((k) => k + 1);
@@ -224,6 +233,7 @@ export default function DashboardShell({ user, initial, mock }: { user: User; in
     setRefreshing(false);
     if (fresh) {
       setAgentRoutes(null);
+      setAgentCut(null);
       setScannedNow(false);
       setShowAll(false);
       setScanKey((k) => k + 1);
@@ -413,6 +423,11 @@ export default function DashboardShell({ user, initial, mock }: { user: User; in
                   <p className="font-mono text-xs text-muted">
                     {scanned ? "attack graph · live from FalkorDB" : "your network · run a scan to reveal attack paths"}
                   </p>
+                  {liveCut && (
+                    <button onClick={() => setAgentCut(null)} className="rounded-full border border-amber-600/40 bg-amber-600/10 px-2.5 py-0.5 font-mono text-[11px] text-amber-700 hover:bg-amber-600/20">
+                      network cut · {liveCut.length} connection{liveCut.length === 1 ? "" : "s"} · clear ×
+                    </button>
+                  )}
                   {liveRoutes && (
                     <button onClick={() => setAgentRoutes(null)} className="rounded-full border border-blue-600/40 bg-blue-600/10 px-2.5 py-0.5 font-mono text-[11px] text-blue-700 hover:bg-blue-600/20">
                       advisor route · {liveRoutes.length} shown · clear ×
@@ -425,7 +440,7 @@ export default function DashboardShell({ user, initial, mock }: { user: User; in
                   )}
                 </div>
                 <div className="mt-2 h-[700px] overflow-hidden rounded-2xl border border-line bg-bg">
-                  {graphView && <AttackGraph nodes={graphView.nodes} edges={graphView.edges} revealKey={revealKey} agentRoutes={liveRoutes} />}
+                  {graphView && <AttackGraph nodes={graphView.nodes} edges={graphView.edges} revealKey={revealKey} agentRoutes={liveRoutes} cutEdges={liveCut} />}
                 </div>
                 {(refreshing || busyFix) && (
                   <div className="pointer-events-none absolute inset-0 grid place-items-center rounded-2xl bg-bg/40 backdrop-blur-[1px]">
@@ -612,7 +627,7 @@ export default function DashboardShell({ user, initial, mock }: { user: User; in
           </motion.div>
         )}
       </AnimatePresence>
-      <AdvisorPanel open={advisorOpen} onClose={() => setAdvisorOpen(false)} suggestions={advisorSuggestions} onAgentAction={() => void rescan()} onRoutes={(r) => setAgentRoutes(r)} />
+      <AdvisorPanel open={advisorOpen} onClose={() => setAdvisorOpen(false)} suggestions={advisorSuggestions} onAgentAction={() => void rescan()} onRoutes={(r) => setAgentRoutes(r)} onCut={(c) => setAgentCut(c)} />
       <PricingModal open={pricingOpen} onClose={() => setPricingOpen(false)} mock={mock} />
     </AppFrame>
   );

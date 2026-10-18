@@ -10,7 +10,7 @@ export interface ChatMessage {
 /** One line of the NDJSON stream sent by POST /api/chat. */
 export type AdvisorEvent =
   | { type: "tool_call"; id: string; name: string; args: Record<string, unknown> }
-  | { type: "tool_result"; id: string; name: string; ok: boolean; summary: string; routes?: string[][] }
+  | { type: "tool_result"; id: string; name: string; ok: boolean; summary: string; routes?: string[][]; cut?: [string, string][] }
   | { type: "text"; delta: string }
   | { type: "done" }
   | { type: "error"; message: string };

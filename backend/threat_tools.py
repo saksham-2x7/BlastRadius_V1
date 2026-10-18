@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 import engine
 import remediation
+import segmentation
 from blastradius_db import memory
 from blastradius_db.db import run
 
@@ -351,6 +352,21 @@ class TicketOutput(BaseModel):
     memory_id: str
 
 
+def _proposed_change(f: dict[str, Any], host: dict[str, Any]) -> list[str]:
+    """The concrete fix for a ticket: the fixed version from OSV when it knows one, otherwise a clearly generic instruction."""
+    try:
+        fx = remediation.best_fix(remediation.fixed_versions(f["cve"]), f.get("product"))
+    except Exception:
+        fx = None
+    where = f"on `{f['host']}` ({host.get('software') or 'unknown'})"
+    if not fx:
+        return [f"Upgrade or reconfigure {f['product'] or 'the affected component'} {where} to a fixed version (OSV lists none for {f['cve']}; check the vendor advisory)."]
+    out = [f"Upgrade **{fx['package']}** to **>= {fx['fixed']}** ({fx['ecosystem']}) {where}. Source: OSV {fx['source']}."]
+    if fx.get("also_fixed_in"):
+        out.append(f"Older release branches are fixed in {fx['also_fixed_in']}; the newest is the safe choice.")
+    return out
+
+
 def draft_fix_ticket(finding_id: str, format: str = "github") -> TicketOutput:
     """Turn a finding into a ready-to-file ticket, with graph evidence and the simulated impact. Writes nothing to any
     external system; the draft is logged in the agent's graph memory."""
@@ -384,7 +400,7 @@ def draft_fix_ticket(finding_id: str, format: str = "github") -> TicketOutput:
         *([""] + ["### Example routes through this host"] + [f"- `{' -> '.join(p)}`" for p in routes] if routes else []),
         "",
         "### Proposed change",
-        f"Upgrade or reconfigure {f['product'] or 'the affected component'} on `{f['host']}` ({host.get('software') or 'unknown'}) to a fixed version.",
+        *_proposed_change(f, host),
         f"Rollback: restore the previous package version / config snapshot for {f['cve']} on {f['host']}.",
         "",
         "**Needs human approval before applying.**" if approval else "Low blast radius: safe to apply automatically.",
@@ -744,6 +760,61 @@ def generate_remediation_playbook(scope: str = "applied") -> PlaybookOutput:
         memory_id=mid)
 
 
+# --------------------------------------------------------------------------------------------- segmentation (min cut)
+class CutInput(_Strict):
+    pass
+
+
+class CutEdge(BaseModel):
+    source: str
+    target: str
+    attack_paths: int = Field(ge=0, description="Live attack paths that use this connection.")
+
+
+class CutOutput(BaseModel):
+    paths_now: int = Field(ge=0)
+    cut: list[CutEdge]
+    method: str
+    structural_edge_disjoint_routes: int | None = Field(description="FalkorDB algo.maxFlow over the whole network: how many edge-disjoint routes exist (an upper bound on any cut).")
+    note: str
+
+
+MAXFLOW = """
+MATCH (s:Internet)
+MATCH (t:DataStore {crown: true})
+WITH s, collect(t) AS ts
+CALL algo.maxFlow({sourceNodes: [s], targetNodes: ts, relationshipTypes: ['CAN_REACH'], capacityProperty: 'cap'})
+YIELD maxFlow RETURN maxFlow
+"""
+
+
+def suggest_network_cut() -> CutOutput:
+    """The fewest connections to remove so no live attack path remains, an alternative to waiting for patches."""
+    scan = engine.scan()
+    paths = scan["paths"]
+    cut = segmentation.min_cut(paths)
+    use = {}
+    for p in paths:
+        for a, b in zip(p, p[1:]):
+            use[(a, b)] = use.get((a, b), 0) + 1
+    structural: int | None
+    try:  # FalkorDB cross-check on the whole network; edges need a capacity, set once (idempotent)
+        run("MATCH ()-[e:CAN_REACH]->() WHERE e.cap IS NULL SET e.cap = 1")
+        rows = run(MAXFLOW)
+        structural = int(rows[0][0]) if rows else 0
+    except Exception:
+        structural = None
+    edges = [CutEdge(source=a, target=b, attack_paths=use.get((a, b), 0)) for a, b in cut]
+    if not paths:
+        note = "No live attack path exists, so no cut is needed."
+    else:
+        note = (f"Remove these {len(edges)} connection(s) (firewall or security-group rules) and none of the {len(paths)} live attack path(s) "
+                "can reach a crown jewel. This is the minimum: no smaller set of connections does it. Patching can wait, but the "
+                "connections may be needed by the business, so check before cutting.")
+    return CutOutput(paths_now=len(paths), cut=edges, structural_edge_disjoint_routes=structural, note=note,
+                     method="Minimum edge cut over the live attack paths (Edmonds-Karp); cross-checked with FalkorDB algo.maxFlow on the network")
+
+
 # --------------------------------------------------------------------------------------------- registry
 class ToolDef:
     def __init__(self, description: str, input_model: type[BaseModel], output_model: type[BaseModel],
@@ -820,5 +891,11 @@ TOOLS: dict[str, ToolDef] = {
         "Export decided fixes as a runnable Ansible playbook (with rollback), using fixed versions looked up live from OSV. "
         "The real-world handoff: BlastRadius changes no server itself. scope 'applied' = fixes already applied or approved.",
         PlaybookInput, PlaybookOutput, lambda i: generate_remediation_playbook(i.scope),
+    ),
+    "suggest_network_cut": ToolDef(
+        "Network segmentation plan: the fewest connections to cut so no route from the internet reaches a crown jewel. An "
+        "alternative to patching that a network team can do now. Uses a minimum cut over the live attack paths, cross-checked "
+        "with FalkorDB's max-flow algorithm. Read-only: it changes nothing.",
+        CutInput, CutOutput, lambda i: suggest_network_cut(),
     ),
 }

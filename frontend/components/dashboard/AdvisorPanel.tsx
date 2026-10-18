@@ -87,7 +87,7 @@ function StepLine({ step }: { step: Step }) {
   );
 }
 
-export default function AdvisorPanel({ open, onClose, suggestions = SUGGESTIONS, onAgentAction, onRoutes }: { open: boolean; onClose: () => void; suggestions?: string[]; onAgentAction?: () => void; onRoutes?: (routes: string[][]) => void }) {
+export default function AdvisorPanel({ open, onClose, suggestions = SUGGESTIONS, onAgentAction, onRoutes, onCut }: { open: boolean; onClose: () => void; suggestions?: string[]; onAgentAction?: () => void; onRoutes?: (routes: string[][]) => void; onCut?: (cut: [string, string][]) => void }) {
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -122,13 +122,14 @@ export default function AdvisorPanel({ open, onClose, suggestions = SUGGESTIONS,
       else if (e.type === "tool_result") {
         if (e.ok && e.name === "apply_safe_fix") onAgentAction?.();
         if (e.ok && e.routes?.length) onRoutes?.(e.routes);
+        if (e.ok && e.cut?.length) onCut?.(e.cut);
         patch(id, (m) => ({
           ...m,
           steps: m.steps.map((s) => (s.id === e.id ? { ...s, status: e.ok ? "ok" : "error", summary: e.summary } : s)),
         }));
       } else if (e.type === "error") patch(id, (m) => ({ ...m, error: e.message }));
     },
-    [patch, onAgentAction, onRoutes]
+    [patch, onAgentAction, onRoutes, onCut]
   );
 
   const send = useCallback(

@@ -1,6 +1,6 @@
 import "server-only";
 import { EngineError } from "@/lib/engine";
-import type { ApplyResult, AttackPathsResult, ChokeResult, ContextResult, ExplainResult, RecallResult, SimulateResult, TicketResult, FileResult, EscalateResult, PendingResult, BlastZoneResult, PlaybookResult } from "./results";
+import type { ApplyResult, AttackPathsResult, ChokeResult, ContextResult, ExplainResult, RecallResult, SimulateResult, TicketResult, FileResult, EscalateResult, PendingResult, BlastZoneResult, PlaybookResult, CutResult } from "./results";
 
 /** One tool as declared by the MCP server (JSON Schema generated from the Pydantic models). */
 export interface ToolSpec {
@@ -67,6 +67,10 @@ export function summarize(name: string, result: unknown): string {
     case "generate_remediation_playbook": {
       const r = result as PlaybookResult;
       return `playbook for ${r.fixes.length} fix${r.fixes.length === 1 ? "" : "es"} · ${r.fixes.filter((f) => f.fixed_version).length} with a fixed version from OSV · changes no server`;
+    }
+    case "suggest_network_cut": {
+      const r = result as CutResult;
+      return r.cut.length ? `cut ${r.cut.length} connection${r.cut.length === 1 ? "" : "s"} to stop all ${r.paths_now} paths: ${r.cut.map((e) => `${e.source}→${e.target}`).join(", ")}` : "no live attack path: nothing to cut";
     }
     case "recall_agent_memory": {
       const r = result as RecallResult;
