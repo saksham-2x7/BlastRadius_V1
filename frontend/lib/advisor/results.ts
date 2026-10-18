@@ -127,3 +127,11 @@ export interface BlastZoneResult {
   on_attack_paths: number;
   note: string;
 }
+
+export interface PlaybookResult {
+  scope: string;
+  fixes: { finding_id: string; cve_id: string; host: string; product: string | null; mode: string; ecosystem: string | null; package: string | null; fixed_version: string | null; source: string | null }[];
+  playbook_yaml: string;
+  note: string;
+  memory_id: string;
+}

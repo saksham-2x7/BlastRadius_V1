@@ -13,6 +13,7 @@ from typing import Annotated, Any, Callable, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 import engine
+import remediation
 from blastradius_db import memory
 from blastradius_db.db import run
 
@@ -688,6 +689,61 @@ def get_blast_zone(host: str) -> BlastZoneOutput:
              + " Whether that is exploitable depends on the findings along the way (see on_attack_paths).")
 
 
+# --------------------------------------------------------------------------------------------- remediation playbook
+class PlaybookInput(_Strict):
+    scope: Literal["applied", "open_on_paths"] = Field(
+        default="applied", description="'applied': the fixes already applied or approved. 'open_on_paths': every unpatched finding on a live attack path.")
+
+
+class PlaybookFix(BaseModel):
+    finding_id: str
+    cve_id: str
+    host: str
+    product: str | None
+    mode: str
+    ecosystem: str | None
+    package: str | None
+    fixed_version: str | None
+    source: str | None
+
+
+class PlaybookOutput(BaseModel):
+    scope: str
+    fixes: list[PlaybookFix]
+    playbook_yaml: str = Field(description="Ansible playbook with fix and rollback tasks. Run it with --check --diff first.")
+    note: str
+    memory_id: str
+
+
+def generate_remediation_playbook(scope: str = "applied") -> PlaybookOutput:
+    """Turn decided fixes into a runnable Ansible playbook with fixed versions looked up live from OSV. Touches no server."""
+    scan = engine.scan()
+    by_id = {f["id"]: f for f in scan["findings"]}
+    if scope == "applied":
+        picked = [(h["finding_id"], h["mode"]) for h in scan["history"] if h["finding_id"] in by_id]
+    else:
+        picked = [(f["id"], "proposed") for f in scan["findings"] if not f["patched"] and f["paths"] > 0]
+    rows: list[dict[str, Any]] = []
+    for fid, mode in list(dict.fromkeys(picked))[:25]:
+        f = by_id[fid]
+        fx = remediation.best_fix(remediation.fixed_versions(f["cve"]), f.get("product"))
+        rows.append({"finding_id": fid, "cve": f["cve"], "host": f["host"], "product": f.get("product"), "mode": mode, "fix": fx})
+    yaml_text = remediation.build_playbook(rows)
+    found = sum(1 for r in rows if r["fix"])
+    mid = memory.remember("generate_remediation_playbook", "-", "-", "playbook_generated", f"scope={scope}, {len(rows)} fixes, {found} with a known fixed version",
+                          scan["summary"]["paths"], scan["summary"]["paths"])
+    return PlaybookOutput(
+        scope=scope,
+        fixes=[PlaybookFix(finding_id=r["finding_id"], cve_id=r["cve"], host=r["host"], product=r["product"], mode=r["mode"],
+                           ecosystem=(r["fix"] or {}).get("ecosystem"), package=(r["fix"] or {}).get("package"),
+                           fixed_version=(r["fix"] or {}).get("fixed"), source=(r["fix"] or {}).get("source")) for r in rows],
+        playbook_yaml=yaml_text,
+        note=(f"{len(rows)} fix(es), {found} with a fixed version from OSV." if rows else
+              "No fixes to export yet: apply or approve a fix first, or use scope 'open_on_paths'.")
+        + " BlastRadius changes no server; review the playbook and run it with --check --diff first.",
+        memory_id=mid)
+
+
 # --------------------------------------------------------------------------------------------- registry
 class ToolDef:
     def __init__(self, description: str, input_model: type[BaseModel], output_model: type[BaseModel],
@@ -759,5 +815,10 @@ TOOLS: dict[str, ToolDef] = {
         "What can an attacker reach after compromising one host? Uses FalkorDB's breadth-first-search algorithm over "
         "reachability and says whether a crown jewel is in the zone. Read-only.",
         BlastZoneInput, BlastZoneOutput, lambda i: get_blast_zone(i.host),
+    ),
+    "generate_remediation_playbook": ToolDef(
+        "Export decided fixes as a runnable Ansible playbook (with rollback), using fixed versions looked up live from OSV. "
+        "The real-world handoff: BlastRadius changes no server itself. scope 'applied' = fixes already applied or approved.",
+        PlaybookInput, PlaybookOutput, lambda i: generate_remediation_playbook(i.scope),
     ),
 }

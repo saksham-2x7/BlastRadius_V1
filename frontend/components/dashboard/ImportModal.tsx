@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Loader2, Upload, X } from "lucide-react";
-import { IMPORT_EXAMPLE } from "@/lib/import-example";
+import { IMPORT_EXAMPLE, IMPORT_TERRAFORM_EXAMPLE } from "@/lib/import-example";
 
 /** Paste or upload your own inventory (JSON, optionally with Trivy reports). Returns an error message, or null on success. */
 export default function ImportModal({ onClose, onImport }: { onClose: () => void; onImport: (payload: unknown) => Promise<string | null> }) {
@@ -28,7 +28,7 @@ export default function ImportModal({ onClose, onImport }: { onClose: () => void
 
   const readFile = (f: File | undefined) => {
     if (!f) return;
-    if (f.size > 300_000) return setError("That file is too large (300 KB max).");
+    if (f.size > 2_000_000) return setError("That file is too large (2 MB max).");
     f.text().then(setText, () => setError("Could not read that file."));
   };
 
@@ -49,7 +49,7 @@ export default function ImportModal({ onClose, onImport }: { onClose: () => void
           <div>
             <h2 id="import-title" className="text-lg font-medium">Use your own data</h2>
             <p className="mt-1 text-sm text-muted">
-              Paste or upload your inventory as JSON: hosts, data stores, who can reach whom, and findings (or Trivy / Grype reports under <code className="font-mono text-xs">trivy</code> / <code className="font-mono text-xs">grype</code>). It becomes
+              Paste or upload your inventory as JSON (or the output of <code className="font-mono text-xs">terraform show -json</code> under <code className="font-mono text-xs">terraform</code>): hosts, data stores, who can reach whom, and findings (or Trivy / Grype reports under <code className="font-mono text-xs">trivy</code> / <code className="font-mono text-xs">grype</code>). It becomes
               your own private FalkorDB graph; the shared sample is untouched. KEV and EPSS are fetched live.
             </p>
           </div>
@@ -70,11 +70,14 @@ export default function ImportModal({ onClose, onImport }: { onClose: () => void
             {error}
           </p>
         )}
-        <p className="mt-2 text-xs text-muted">Only public, synthetic or your own data. Never paste credentials or private customer data. 300 KB max.</p>
+        <p className="mt-2 text-xs text-muted">Only public, synthetic or your own data. Never paste credentials or private customer data. 2 MB max.</p>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
           <div className="flex gap-2">
             <button onClick={() => setText(JSON.stringify(IMPORT_EXAMPLE, null, 2))} className="h-10 rounded-full border border-line px-4 text-sm text-muted transition hover:text-fg">
               Load example
+            </button>
+            <button onClick={() => setText(JSON.stringify(IMPORT_TERRAFORM_EXAMPLE, null, 2))} className="h-10 rounded-full border border-line px-4 text-sm text-muted transition hover:text-fg">
+              Load Terraform example
             </button>
             <button onClick={() => fileRef.current?.click()} className="flex h-10 items-center gap-1.5 rounded-full border border-line px-4 text-sm text-muted transition hover:text-fg">
               <Upload className="h-3.5 w-3.5" /> Upload .json

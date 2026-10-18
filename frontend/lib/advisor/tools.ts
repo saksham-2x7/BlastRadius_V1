@@ -1,6 +1,6 @@
 import "server-only";
 import { EngineError } from "@/lib/engine";
-import type { ApplyResult, AttackPathsResult, ChokeResult, ContextResult, ExplainResult, RecallResult, SimulateResult, TicketResult, FileResult, EscalateResult, PendingResult, BlastZoneResult } from "./results";
+import type { ApplyResult, AttackPathsResult, ChokeResult, ContextResult, ExplainResult, RecallResult, SimulateResult, TicketResult, FileResult, EscalateResult, PendingResult, BlastZoneResult, PlaybookResult } from "./results";
 
 /** One tool as declared by the MCP server (JSON Schema generated from the Pydantic models). */
 export interface ToolSpec {
@@ -63,6 +63,10 @@ export function summarize(name: string, result: unknown): string {
     case "get_blast_zone": {
       const r = result as BlastZoneResult;
       return `${r.host} reaches ${r.reachable.length} node${r.reachable.length === 1 ? "" : "s"}${r.reaches_crown_jewel ? " · crown jewel in reach" : " · no crown jewel"} (FalkorDB BFS)`;
+    }
+    case "generate_remediation_playbook": {
+      const r = result as PlaybookResult;
+      return `playbook for ${r.fixes.length} fix${r.fixes.length === 1 ? "" : "es"} · ${r.fixes.filter((f) => f.fixed_version).length} with a fixed version from OSV · changes no server`;
     }
     case "recall_agent_memory": {
       const r = result as RecallResult;

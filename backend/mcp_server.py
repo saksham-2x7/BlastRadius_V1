@@ -134,5 +134,12 @@ async def get_blast_zone(
     return await anyio.to_thread.run_sync(t.get_blast_zone, host)
 
 
+@mcp.tool(name="generate_remediation_playbook", description=t.TOOLS["generate_remediation_playbook"].description, annotations=READ_ONLY)
+async def generate_remediation_playbook(
+    scope: Annotated[str, Field(pattern="^(applied|open_on_paths)$", description="'applied' or 'open_on_paths'.")] = "applied",
+) -> t.PlaybookOutput:
+    return await anyio.to_thread.run_sync(t.generate_remediation_playbook, scope)
+
+
 if __name__ == "__main__":
     mcp.run()  # stdio

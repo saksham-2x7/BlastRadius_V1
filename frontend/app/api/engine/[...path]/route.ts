@@ -6,8 +6,8 @@ import { getAccount } from "@/lib/subscription";
 import { WORKSPACE_COOKIE, workspaceHeaders } from "@/lib/workspace";
 
 // Only these engine endpoints are reachable from the browser, and only with a valid session.
-const ALLOWED = new Set(["GET scan", "POST fix/auto", "POST fix/auto-all", "POST fix/approve", "POST reset", "POST import"]);
-const MAX_IMPORT_BYTES = 300_000;
+const ALLOWED = new Set(["GET scan", "POST fix/auto", "POST fix/auto-all", "POST fix/approve", "POST reset", "POST import", "GET playbook"]);
+const MAX_IMPORT_BYTES = 2_000_000; // a real `terraform show -json` is often several hundred KB
 // Pro-only routes: the plan is read fresh from the database on every call (fails closed), never from the cookie.
 const PRO_ONLY = new Set(["POST fix/auto-all"]);
 
@@ -37,7 +37,7 @@ async function proxy(req: Request, ctx: { params: Promise<{ path: string[] }> })
     }
     const body = req.method === "POST" ? await req.text() : undefined;
     if (route === "import" && (body?.length ?? 0) > MAX_IMPORT_BYTES) {
-      return NextResponse.json({ error: "rejected", kind: "rejected", message: "That file is too large (300 KB max)." }, { status: 413 });
+      return NextResponse.json({ error: "rejected", kind: "rejected", message: "That file is too large (2 MB max). Trim it with jq or import fewer resources." }, { status: 413 });
     }
     const headers = route === "import" ? { "X-Workspace": session.user.id } : await workspaceHeaders(session.user.id);
     const data = await engineFetch<unknown>(`/api/${route}`, { method: req.method, body: body || undefined, headers });
