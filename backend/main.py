@@ -3,9 +3,10 @@ import config  # noqa: F401  (loads backend/.env; must stay the first import)
 import contextlib
 import os
 import secrets
+import time
 from typing import Any, Literal
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Body, Depends, FastAPI, Header, HTTPException, Request
 from pydantic import ValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -164,15 +165,37 @@ def health() -> dict:
     return {"status": "ok", "falkordb": f"{db.HOST}:{db.PORT}", "graph": db.GRAPH_NAME}
 
 
+_IMPORTS: dict[str, list[float]] = {}  # workspace graph -> timestamps of recent imports (per-process rate limit)
+MAX_IMPORTS_PER_HOUR = 10
+
+
 @app.post("/api/import")
-def import_inventory(spec: ingest.ImportSpec) -> dict:
-    """Load the caller's own inventory as a private workspace graph, enrich it with live KEV/EPSS, and return the scan."""
+def import_inventory(raw: dict[str, Any] = Body(...)) -> dict:
+    """Load the caller's own inventory (JSON, Terraform state, Trivy/Grype reports) as a private workspace graph, enrich it
+    with live KEV/EPSS/NVD data, and return the scan."""
     if db.current_graph() == db.SAMPLE_GRAPH:
         raise HTTPException(status_code=400, detail="A workspace id is required to import.")
+    now = time.time()
+    recent = [t for t in _IMPORTS.get(db.current_graph(), []) if now - t < 3600]
+    if len(recent) >= MAX_IMPORTS_PER_HOUR:
+        raise HTTPException(status_code=429, detail=f"Import limit reached ({MAX_IMPORTS_PER_HOUR} per hour). Try again later.")
+    try:
+        spec, warnings = ingest.parse(raw)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors(include_url=False, include_context=False, include_input=False))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=[{"loc": ["body", "terraform"], "msg": str(exc), "type": "value_error"}])
+    _IMPORTS[db.current_graph()] = [*recent, now]
     with engine._lock:
         counts = ingest.build(spec)
     live = enrich.enrich_current_graph()
-    return {"imported": counts, "live_feeds": live, "scan": engine.scan()}
+    return {"imported": counts, "live_feeds": live, "warnings": warnings, "scan": engine.scan()}
+
+
+@app.get("/api/playbook")
+def playbook(scope: Literal["applied", "open_on_paths"] = "applied") -> dict:
+    """Ansible remediation playbook for the decided fixes (BlastRadius itself changes no server)."""
+    return threat_tools.generate_remediation_playbook(scope).model_dump()
 
 
 @app.get("/api/scan")

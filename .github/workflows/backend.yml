@@ -26,7 +26,7 @@ jobs:
       - run: pip install -r requirements.txt
       - run: python -m compileall -q .
       - name: Tests (tier guard, import validation, agent + tenant isolation against a real FalkorDB)
-        run: pip install pytest && python -m pytest -q tests
+        run: pip install pytest pyyaml && python -m pytest -q tests
       - name: App imports cleanly
         run: python -c "import config, main; print('backend imports OK')"
       - name: Docker image builds (same build Railway runs)

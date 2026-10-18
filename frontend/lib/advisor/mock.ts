@@ -3,7 +3,7 @@ import type { AdvisorProvider } from "./provider";
 import type { AdvisorEvent } from "./types";
 import { summarize, toolErrorMessage, type ToolSource } from "./tools";
 import { fmtEpssText } from "./format";
-import type { ApplyResult, AttackPathsResult, ChokeResult, ContextResult, ExplainResult, RankedFinding, RecallResult, SimulateResult, TicketResult, FileResult, EscalateResult, PendingResult, BlastZoneResult } from "./results";
+import type { ApplyResult, AttackPathsResult, ChokeResult, ContextResult, ExplainResult, RankedFinding, RecallResult, SimulateResult, TicketResult, FileResult, EscalateResult, PendingResult, BlastZoneResult, PlaybookResult } from "./results";
 
 /**
  * Mock "LLM": picks tools with simple keyword rules and writes its answer from REAL tool results (templated text).
@@ -48,6 +48,22 @@ export const mockProvider: AdvisorProvider = {
 
     await sleep(250, signal);
     const ref = q.match(REF)?.[1]?.toUpperCase();
+
+    // 0h) real-world handoff: remediation playbook
+    if (/playbook|ansible|runbook|remediation (script|plan)|patch plan/.test(lower)) {
+      const pb: { value?: PlaybookResult } = {};
+      yield* call("generate_remediation_playbook", { scope: /open|all|propos/.test(lower) ? "open_on_paths" : "applied" }, pb);
+      if (!pb.value) return void (yield* say("I couldn't build the playbook. Is the engine running?", signal));
+      yield* say(
+        pb.value.fixes.length
+          ? `Remediation playbook for ${pb.value.fixes.length} fix${pb.value.fixes.length === 1 ? "" : "es"}:\n\n` +
+              pb.value.fixes.map((f) => `• ${f.cve_id} on \`${f.host}\`: ${f.fixed_version ? `upgrade ${f.package} to >= ${f.fixed_version} (${f.ecosystem}, source ${f.source})` : "no machine-readable fixed version found, patch manually"}`).join("\n") +
+              `\n\n${pb.value.note}\nDownload it from **Applied fixes** on the dashboard.`
+          : pb.value.note,
+        signal
+      );
+      return;
+    }
 
     // 0f) human-in-the-loop: pending approvals, escalation
     if (/pending|waiting for (a )?(human|approval)|who (needs|has) to approve/.test(lower)) {
@@ -298,7 +314,7 @@ export const mockProvider: AdvisorProvider = {
     }
 
     yield* say(
-      "I can analyse your attack graph. Try:\n\n• Which vulnerability should I patch first?\n• Which findings are in CISA KEV?\n• What if I patch <finding id>?\n• Fix everything that is safe\n• Where is the choke point?\n• Draft a Jira ticket for the top finding\n• What can an attacker reach from api-gateway?\n• Ask a human to approve the risky ones\n• What did you do earlier?",
+      "I can analyse your attack graph. Try:\n\n• Which vulnerability should I patch first?\n• Which findings are in CISA KEV?\n• What if I patch <finding id>?\n• Fix everything that is safe\n• Where is the choke point?\n• Draft a Jira ticket for the top finding\n• What can an attacker reach from api-gateway?\n• Ask a human to approve the risky ones\n• Export an Ansible playbook for the fixes\n• What did you do earlier?",
       signal
     );
   },

@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Bot, Check, ChevronDown, History, Lightbulb, Loader2, Lock, RefreshCw, RotateCcw, Sparkles, Upload, UserCheck, X } from "lucide-react";
+import { Bot, Check, Download, ChevronDown, History, Lightbulb, Loader2, Lock, RefreshCw, RotateCcw, Sparkles, Upload, UserCheck, X } from "lucide-react";
 import ScanTerminal from "./ScanTerminal";
 import EngineError from "./EngineError";
 import AppFrame from "./AppFrame";
@@ -186,7 +186,7 @@ export default function DashboardShell({ user, initial, mock }: { user: User; in
 
   const importData = useCallback(
     async (payload: unknown): Promise<string | null> => {
-      const r = await engine<{ scan: Scan; imported: { findings: number; hosts: number }; live_feeds: boolean }>("import", {
+      const r = await engine<{ scan: Scan; imported: { findings: number; hosts: number }; live_feeds: boolean; warnings?: string[] }>("import", {
         method: "POST",
         body: JSON.stringify(payload),
       });
@@ -201,11 +201,21 @@ export default function DashboardShell({ user, initial, mock }: { user: User; in
         window.localStorage.removeItem("br-scanned");
       } catch {}
       setImportOpen(false);
-      say("ok", `Imported ${r.data.imported.hosts} hosts and ${r.data.imported.findings} findings · ${r.data.live_feeds ? "live KEV/EPSS applied" : "feeds unreachable, using CVSS fallback"}`);
+      say("ok", `Imported ${r.data.imported.hosts} hosts and ${r.data.imported.findings} findings · ${r.data.live_feeds ? "live KEV/EPSS applied" : "feeds unreachable, using CVSS fallback"}${r.data.warnings?.length ? ` · ${r.data.warnings[0]}` : ""}`);
       return null;
     },
     [say]
   );
+
+  const downloadPlaybook = useCallback(async () => {
+    const r = await engine<{ playbook_yaml: string; fixes: unknown[] }>("playbook?scope=applied");
+    if ("error" in r) return say("err", r.error.message);
+    const url = URL.createObjectURL(new Blob([r.data.playbook_yaml], { type: "text/yaml" }));
+    const a = Object.assign(document.createElement("a"), { href: url, download: "blastradius-remediation.yml" });
+    a.click();
+    URL.revokeObjectURL(url);
+    say("ok", `Remediation playbook downloaded (${r.data.fixes.length} fix${r.data.fixes.length === 1 ? "" : "es"}). Review it and run with --check --diff first.`);
+  }, [say]);
 
   const backToSample = useCallback(async () => {
     setRefreshing(true);
@@ -542,6 +552,12 @@ export default function DashboardShell({ user, initial, mock }: { user: User; in
                     <span className="font-mono text-xs font-normal text-muted">{scan.history.length} · each with a rollback note</span>
                     <ChevronDown className="ml-auto h-4 w-4 text-muted transition group-open:rotate-180" />
                   </summary>
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-2">
+                    <p className="text-xs text-muted">Export what was decided as an Ansible playbook with rollback. BlastRadius changes no server itself.</p>
+                    <button onClick={downloadPlaybook} className="flex items-center gap-1.5 rounded-md border border-accent/30 bg-accent/10 px-3 py-1.5 text-xs text-accent transition hover:bg-accent/20">
+                      <Download className="h-3.5 w-3.5" /> Download remediation playbook
+                    </button>
+                  </div>
                   <ul className="divide-y divide-line border-t border-line">
                     {scan.history.map((h) => (
                       <li key={h.id} className="px-4 py-3 text-sm">

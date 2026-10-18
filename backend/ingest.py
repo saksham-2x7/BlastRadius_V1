@@ -7,11 +7,12 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+import tfimport
 from blastradius_db import importer, memory
 
 ID = r"^[A-Za-z0-9_.-]{1,40}$"
 CVE = r"^CVE-[0-9]{4}-[0-9]{4,7}$"
-MAX_FINDINGS = 300
+MAX_FINDINGS = 1000
 
 
 class _Strict(BaseModel):
@@ -51,9 +52,9 @@ class GrypeIn(_Strict):
 
 
 class ImportSpec(_Strict):
-    hosts: list[HostIn] = Field(min_length=1, max_length=60)
-    datastores: list[StoreIn] = Field(min_length=1, max_length=20)
-    edges: list[tuple[str, str]] = Field(default_factory=list, max_length=300, description="[from, to] network reachability.")
+    hosts: list[HostIn] = Field(min_length=1, max_length=500)
+    datastores: list[StoreIn] = Field(min_length=1, max_length=50)
+    edges: list[tuple[str, str]] = Field(default_factory=list, max_length=2000, description="[from, to] network reachability.")
     findings: list[FindingIn] = Field(default_factory=list, max_length=MAX_FINDINGS)
     trivy: list[TrivyIn] = Field(default_factory=list, max_length=20, description="Trivy JSON reports, one per host.")
     grype: list[GrypeIn] = Field(default_factory=list, max_length=20, description="Grype JSON reports, one per host.")
@@ -143,3 +144,22 @@ def build(spec: ImportSpec) -> dict[str, int]:
     except Exception:
         pass
     return {"hosts": len(spec.hosts), "datastores": len(spec.datastores), "edges": len(edges), "findings": len(rows)}
+
+
+def parse(raw: dict[str, Any]) -> tuple[ImportSpec, list[str]]:
+    """Validate an import payload. A `terraform` key (the JSON from `terraform show -json`) is converted to hosts, data
+    stores and edges first; anything you list explicitly wins over what Terraform produced for the same id."""
+    raw = dict(raw)
+    tf = raw.pop("terraform", None)
+    warnings: list[str] = []
+    if tf is not None:
+        if not isinstance(tf, dict):
+            raise ValueError("terraform must be the JSON object printed by `terraform show -json`.")
+        conv = tfimport.convert(tf)
+        warnings = conv["warnings"]
+        for key in ("hosts", "datastores"):
+            mine = {x["id"]: x for x in conv[key]}
+            mine.update({x["id"]: x for x in raw.get(key, []) if isinstance(x, dict) and "id" in x})
+            raw[key] = list(mine.values())
+        raw["edges"] = [list(e) for e in conv["edges"]] + [e for e in raw.get("edges", [])]
+    return ImportSpec.model_validate(raw), warnings
