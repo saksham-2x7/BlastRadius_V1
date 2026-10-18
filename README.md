@@ -2,7 +2,7 @@
 
 **See the attack paths. Fix what actually matters.**
 
-**Live demo: [blastradius-ashy.vercel.app](https://blastradius-ashy.vercel.app)**
+**Live demo: [blastradius-ashy.vercel.app](https://blastradius-ashy.vercel.app)** · **Demo video: [watch on YouTube](https://youtu.be/IauSZKEO8PQ)** · **Blog: [read on DEV.to](https://dev.to/kaustubh_negi/-blastradius-why-severity-scores-lie-and-how-graph-ai-solves-real-attack-paths-4846)**
 
 BlastRadius maps infrastructure as a graph in FalkorDB, finds every real route from the internet to your crown jewels, ranks findings by the attack paths they sit on (not CVSS), and fixes the few that cut them: automatically when low-risk, with human approval when not. An AI advisor reads the graph through MCP tools.
 
@@ -30,7 +30,7 @@ flowchart LR
   C -->|"live feeds"| P["CISA KEV, FIRST EPSS"]
 ```
 
-**Submission checklist (hackathon Rule 10):** public repo ✅ · README with setup and graph data model ✅ (below) · the Cypher queries and algorithms the product depends on ✅ (below) · live deployment ✅ (link above) · demo video: see the link at the top · track: **Agents That Act on Connected Data** · AI assistance is disclosed under "AI disclosure" below.
+**Submission checklist (hackathon Rule 10):** public repo ✅ · README with setup and graph data model ✅ (below) · the Cypher queries and algorithms the product depends on ✅ (below) · live deployment ✅ (link above) · demo video ✅ ([YouTube](https://youtu.be/IauSZKEO8PQ)) · track: **Agents That Act on Connected Data** · AI assistance is disclosed under "AI disclosure" below.
 
 ## Graph Hacks (WeMakeDevs x FalkorDB) · Track 1: Agents That Act on Connected Data
 
@@ -74,7 +74,7 @@ CALL algo.SPpaths({sourceNode: s, targetNode: t, relationshipTypes: ['CAN_REACH'
 ```
 
 ### Run it
-See "Run locally" below. Data: synthetic topology with real CVE ids; KEV and EPSS are live public feeds; CVSS is a snapshot. Tests (66): backend 33 (`cd backend && pip install -r requirements.txt pytest && pytest`) and frontend 33 (`cd frontend && npm test`). Backend unit tests cover the safety tiers, import validation and edge de-duplication, and the live-feed client with the network mocked; integration tests (run in CI against a real FalkorDB service) cover the agent's tools and refusals, the pitch story (4 paths to 0), per-user graphs and per-tenant memory. Frontend tests cover the engine client and its error mapping, signed checkout tokens, subscription handling and the advisor providers. Demo script: [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md). Blog post: [docs/BLOG.md](docs/BLOG.md). Demo video: add the link here before submitting.
+See "Run locally" below. Data: synthetic topology with real CVE ids; KEV and EPSS are live public feeds; CVSS is a snapshot. Tests (66): backend 33 (`cd backend && pip install -r requirements.txt pytest && pytest`) and frontend 33 (`cd frontend && npm test`). Backend unit tests cover the safety tiers, import validation and edge de-duplication, and the live-feed client with the network mocked; integration tests (run in CI against a real FalkorDB service) cover the agent's tools and refusals, the pitch story (4 paths to 0), per-user graphs and per-tenant memory. Frontend tests cover the engine client and its error mapping, signed checkout tokens, subscription handling and the advisor providers. Demo script: [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md). Blog post: [docs/BLOG.md](docs/BLOG.md).
 
 ## The four parts (work on one without touching the others)
 
@@ -116,13 +116,6 @@ cd frontend && npm install && npm run dev                                  # 3) 
 
 ## AI Disclosure
 Developed with AI coding assistance (Claude Code) for boilerplate and testing. All graph data modeling, Cypher queries, MCP tool implementations, and autonomy tier architecture were designed, reviewed, and verified by the team.
-
-# BlastRadius 🛡️
-> Graph-native, autonomous AI vulnerability remediation powered by FalkorDB and Model Context Protocol (MCP).
-
-🚀 **Live App**: [blastradius-ashy.vercel.app](https://blastradius-ashy.vercel.app)  
-📝 **Engineering Deep Dive**: [Read on DEV.to](https://dev.to/kaustubh_negi/-blastradius-why-severity-scores-lie-and-how-graph-ai-solves-real-attack-paths-4846)  
-🎥 **Demo Video**: [Watch on YouTube](https://youtu.be/IauSZKEO8PQ)
 
 ## License
 MIT. See [LICENSE](LICENSE).
