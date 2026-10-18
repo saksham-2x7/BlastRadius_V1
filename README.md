@@ -2,10 +2,35 @@
 
 **See the attack paths. Fix what actually matters.**
 
-**Live demo: [blastradius-ashy.vercel.app](https://blastradius-ashy.vercel.app)**
+**Live demo: [blastradius-ashy.vercel.app](https://blastradius-ashy.vercel.app)** · **Demo video: [watch on YouTube](https://youtu.be/IauSZKEO8PQ)** · **Blog: [read on DEV.to](https://dev.to/kaustubh_negi/-blastradius-why-severity-scores-lie-and-how-graph-ai-solves-real-attack-paths-4846)**
 
 BlastRadius maps infrastructure as a graph in FalkorDB, finds every real route from the internet to your crown jewels, ranks findings by the attack paths they sit on (not CVSS), and fixes the few that cut them: automatically when low-risk, with human approval when not. An AI advisor reads the graph through MCP tools.
 
+
+## Try it in 60 seconds
+
+1. Open the **[live demo](https://blastradius-ashy.vercel.app)** and sign in with Google.
+2. Dashboard → **Run scan**: 4 attack paths from the internet to the customer database.
+3. Open **Ask advisor** and type, in order:
+   - `Where is the choke point?`: FalkorDB algorithms (`algo.betweenness`, `algo.pageRank`) through an MCP tool
+   - `Show the shortest route an attacker could take`: the route is drawn on the graph (`algo.SPpaths`)
+   - `Fix everything that is safe`: it simulates, applies the low-risk fixes, and **refuses** the choke point (the graph decides, not the model)
+   - `Draft a Jira ticket for the top finding`, then `What did you do earlier?` (per-tenant memory stored in FalkorDB)
+4. **Use your own data** (sidebar) → *Load example* → *Import and scan*: your inventory becomes a private FalkorDB graph.
+5. **Restore demo for everyone** resets the shared sample.
+
+## How it fits together
+
+```mermaid
+flowchart LR
+  A["Browser: Next.js dashboard"] --> B["Next.js API proxy (Vercel)<br/>session + workspace"]
+  B -->|"X-Engine-Key"| C["FastAPI engine + MCP server (Railway)"]
+  B <-->|"tool calls"| L["LLM: Gemini or Claude"]
+  C -->|"Cypher + algo.*"| F[("FalkorDB<br/>sample graph, ws_hash graphs, accounts graph")]
+  C -->|"live feeds"| P["CISA KEV, FIRST EPSS"]
+```
+
+**Submission checklist (hackathon Rule 10):** public repo ✅ · README with setup and graph data model ✅ (below) · the Cypher queries and algorithms the product depends on ✅ (below) · live deployment ✅ (link above) · demo video ✅ ([YouTube](https://youtu.be/IauSZKEO8PQ)) · track: **Agents That Act on Connected Data** · AI assistance is disclosed under "AI disclosure" below.
 
 ## Graph Hacks (WeMakeDevs x FalkorDB) · Track 1: Agents That Act on Connected Data
 
@@ -49,7 +74,7 @@ CALL algo.SPpaths({sourceNode: s, targetNode: t, relationshipTypes: ['CAN_REACH'
 ```
 
 ### Run it
-See "Run locally" below. Data: synthetic topology with real CVE ids; KEV and EPSS are live public feeds; CVSS is a snapshot. Tests (66): backend 33 (`cd backend && pip install -r requirements.txt pytest && pytest`) and frontend 33 (`cd frontend && npm test`). Backend unit tests cover the safety tiers, import validation and edge de-duplication, and the live-feed client with the network mocked; integration tests (run in CI against a real FalkorDB service) cover the agent's tools and refusals, the pitch story (4 paths to 0), per-user graphs and per-tenant memory. Frontend tests cover the engine client and its error mapping, signed checkout tokens, subscription handling and the advisor providers. Demo script: [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md). Blog post: [docs/BLOG.md](docs/BLOG.md). Demo video: add the link here before submitting.
+See "Run locally" below. Data: synthetic topology with real CVE ids; KEV and EPSS are live public feeds; CVSS is a snapshot. Tests (66): backend 33 (`cd backend && pip install -r requirements.txt pytest && pytest`) and frontend 33 (`cd frontend && npm test`). Backend unit tests cover the safety tiers, import validation and edge de-duplication, and the live-feed client with the network mocked; integration tests (run in CI against a real FalkorDB service) cover the agent's tools and refusals, the pitch story (4 paths to 0), per-user graphs and per-tenant memory. Frontend tests cover the engine client and its error mapping, signed checkout tokens, subscription handling and the advisor providers. Demo script: [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md). Blog post: [docs/BLOG.md](docs/BLOG.md).
 
 ## The four parts (work on one without touching the others)
 
@@ -91,13 +116,6 @@ cd frontend && npm install && npm run dev                                  # 3) 
 
 ## AI Disclosure
 Developed with AI coding assistance (Claude Code) for boilerplate and testing. All graph data modeling, Cypher queries, MCP tool implementations, and autonomy tier architecture were designed, reviewed, and verified by the team.
-
-# BlastRadius 🛡️
-> Graph-native, autonomous AI vulnerability remediation powered by FalkorDB and Model Context Protocol (MCP).
-
-🚀 **Live App**: [blastradius-ashy.vercel.app](https://blastradius-ashy.vercel.app)  
-📝 **Engineering Deep Dive**: [Read on DEV.to](https://dev.to/kaustubh_negi/-blastradius-why-severity-scores-lie-and-how-graph-ai-solves-real-attack-paths-4846)  
-🎥 **Demo Video**: [Watch on YouTube](https://youtu.be/IauSZKEO8PQ)
 
 ## License
 MIT. See [LICENSE](LICENSE).
