@@ -7,6 +7,18 @@
 BlastRadius maps infrastructure as a graph in FalkorDB, finds every real route from the internet to your crown jewels, ranks findings by the attack paths they sit on (not CVSS), and fixes the few that cut them: automatically when low-risk, with human approval when not. An AI advisor reads the graph through MCP tools.
 
 
+## What's new here
+
+Most vulnerability tools sort findings by a severity score and stop there. BlastRadius is built around a different question: *which fixes cut real routes to the things an attacker is after, and which of those is it safe to apply automatically?*
+
+- **The graph decides what the agent may do, not the model.** Every finding gets an autonomy tier (`auto`, `approval`, `monitor`) computed from graph facts: a leaf host on a single path is safe, a choke point or a neighbour of the crown jewel is not. `apply_safe_fix` enforces it, so the agent refuses risky fixes even if it is asked to apply them.
+- **FalkorDB's own algorithms are agent tools.** `algo.betweenness`, `algo.pageRank` and `algo.SPpaths` are exposed over MCP, so the agent ranks exposure and finds attack routes with the database, not with prompt guesses.
+- **Answers you can see.** When the agent cites a route, the dashboard draws it on the graph. The route disappears as soon as a fix cuts it, because it is checked against the live attack paths.
+- **Simulate before acting.** The same path query is re-run with one finding treated as patched, so every fix comes with "paths before and after".
+- **One private graph per user, with per-user memory.** Imported inventories (JSON or Trivy reports) become their own FalkorDB graph, and the agent's decisions, including refusals, are stored as nodes in that workspace and recalled in later sessions.
+- **Real public risk data.** CISA KEV and FIRST EPSS are fetched live, so "is it exploited?" comes from current feeds, with the data source stated in every answer.
+- **From finding to workflow.** The agent drafts a ready-to-file Jira or GitHub ticket with the graph evidence, impact and rollback note, and can file a real GitHub issue when the deployment opts in.
+
 ## Try it in 60 seconds
 
 1. Open the **[live demo](https://blastradius-ashy.vercel.app)** and sign in with Google.
