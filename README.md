@@ -7,6 +7,31 @@
 BlastRadius maps infrastructure as a graph in FalkorDB, finds every real route from the internet to your crown jewels, ranks findings by the attack paths they sit on (not CVSS), and fixes the few that cut them: automatically when low-risk, with human approval when not. An AI advisor reads the graph through MCP tools.
 
 
+## Try it in 60 seconds
+
+1. Open the **[live demo](https://blastradius-ashy.vercel.app)** and sign in with Google.
+2. Dashboard → **Run scan**: 4 attack paths from the internet to the customer database.
+3. Open **Ask advisor** and type, in order:
+   - `Where is the choke point?`: FalkorDB algorithms (`algo.betweenness`, `algo.pageRank`) through an MCP tool
+   - `Show the shortest route an attacker could take`: the route is drawn on the graph (`algo.SPpaths`)
+   - `Fix everything that is safe`: it simulates, applies the low-risk fixes, and **refuses** the choke point (the graph decides, not the model)
+   - `Draft a Jira ticket for the top finding`, then `What did you do earlier?` (per-tenant memory stored in FalkorDB)
+4. **Use your own data** (sidebar) → *Load example* → *Import and scan*: your inventory becomes a private FalkorDB graph.
+5. **Restore demo for everyone** resets the shared sample.
+
+## How it fits together
+
+```mermaid
+flowchart LR
+  A["Browser: Next.js dashboard"] --> B["Next.js API proxy (Vercel)<br/>session + workspace"]
+  B -->|"X-Engine-Key"| C["FastAPI engine + MCP server (Railway)"]
+  B <-->|"tool calls"| L["LLM: Gemini or Claude"]
+  C -->|"Cypher + algo.*"| F[("FalkorDB<br/>sample graph, ws_hash graphs, accounts graph")]
+  C -->|"live feeds"| P["CISA KEV, FIRST EPSS"]
+```
+
+**Submission checklist (hackathon Rule 10):** public repo ✅ · README with setup and graph data model ✅ (below) · the Cypher queries and algorithms the product depends on ✅ (below) · live deployment ✅ (link above) · demo video: see the link at the top · track: **Agents That Act on Connected Data** · AI assistance is disclosed under "AI disclosure" below.
+
 ## Graph Hacks (WeMakeDevs x FalkorDB) · Track 1: Agents That Act on Connected Data
 
 **The agent:** the BlastRadius advisor triages security findings and *acts*. It finds where one fix cuts the most routes to a crown jewel, simulates the fix, applies it if the graph says it is low-risk, escalates everything else to a human, and remembers what it did. Every step is a visible MCP tool call.
