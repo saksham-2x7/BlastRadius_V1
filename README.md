@@ -55,9 +55,11 @@ flowchart LR
 | Tool selection through MCP | A real MCP server (`backend/mcp_server.py`) and client (`frontend/lib/advisor/mcp.ts`); Gemini or Claude pick the tools |
 | Actions based on what the graph shows | `apply_safe_fix` patches only findings whose **graph-computed tier** is `auto` (leaf host, one path). Choke points and crown-jewel neighbours are refused and handed to a human. The model cannot override the tier |
 | Explainable results | Each answer cites the exact routes, path counts before/after (`simulate_fix`), and the tier reason. When the agent cites a route, the dashboard **draws it on the graph** (blue edges, ringed hosts) |
-| Real public data | CISA KEV and FIRST EPSS are fetched live (`backend/enrich.py`, cached 24h, background refresh, snapshot fallback). The data notice in every answer says which one is in use |
+| Real public data | CISA KEV, FIRST EPSS and NVD CVSS are fetched live (`backend/enrich.py`, cached 24h, background refresh, snapshot fallback; NVD is rate-limited so scores fill in gradually). The data notice in every answer says which sources are live |
 | Acts in the real workflow | `draft_fix_ticket` writes a ready-to-file GitHub or Jira ticket from graph evidence (paths, KEV, EPSS, simulated impact, rollback). `file_github_issue` files it as a real GitHub issue when the deployment opts in (`GITHUB_TOKEN`, `GITHUB_REPO`), capped at 5/hour, only when the user asks |
-| Your own data | "Use your own data" in the dashboard imports an inventory (hosts, data stores, reachability, findings, optional Trivy JSON) into a **private FalkorDB graph per user** (`ws_<hash>`). Every query and agent tool then runs on it unchanged; the shared sample is untouched. `POST /api/import`, validated and size-capped (`backend/ingest.py`) |
+| Human in the loop, in the graph | When the agent refuses a high-risk fix it opens `(:ApprovalRequest {status: 'pending'})`; `escalate_to_human` posts to the team's webhook (opt-in, https only, rate limited, URL from deployment config only); a human approving in the dashboard closes it; `list_pending_approvals` shows what is still waiting |
+| Blast zone (algorithm tool) | `get_blast_zone` = FalkorDB `algo.BFS`: what an attacker can reach after compromising one host, and whether a crown jewel is inside |
+| Your own data | "Use your own data" in the dashboard imports an inventory (hosts, data stores, reachability, findings, optional Trivy or Grype JSON) into a **private FalkorDB graph per user** (`ws_<hash>`). Every query and agent tool then runs on it unchanged; the shared sample is untouched. `POST /api/import`, validated and size-capped (`backend/ingest.py`) |
 | Memory (bonus) | Per tenant: every decision, including refusals, is stored as `(:Agent)-[:DID]->(:AgentAction)-[:IN]->(:Workspace)` and recalled with `recall_agent_memory`, scoped to the workspace it was taken in. It survives chats and "restore demo" |
 
 ### Graph data model
@@ -66,6 +68,7 @@ flowchart LR
 (:Host)-[:HAS_FINDING]->(:Finding {cve, cvss, epss, kev, exploitable, patched})
 (:Fix {mode, ts, rollback})-[:FIXES]->(:Finding)
 (:Agent {name})-[:DID]->(:AgentAction {tool, finding_id, host, decision, rationale, paths_before, paths_after})   -- accounts graph
+(:Agent)-[:REQUESTED]->(:ApprovalRequest {finding_id, host, status, notified})-[:IN]->(:Workspace)                -- accounts graph
 (:User {id, plan})                                                                                           -- accounts graph
 -- one graph per workspace: the shared sample, or ws_<hash(user id)> for imported inventories (same schema)
 ```
@@ -80,13 +83,15 @@ RETURN [n IN nodes(p) | n.id]
 // what-if: same query with a finding treated as patched (backend/threat_tools.py, SIM_PATHS)
 // choke points: FalkorDB betweenness centrality
 CALL algo.betweenness({nodeLabels: ['Internet','Host','DataStore'], relationshipTypes: ['CAN_REACH']}) YIELD node, score
+// blast zone: what is reachable from a compromised host
+MATCH (s:Host {id: $h}) CALL algo.BFS(s, 6, 'CAN_REACH') YIELD nodes RETURN [n IN nodes | n.id]
 // shortest routes to the crown jewel
 MATCH (s:Internet), (t:DataStore {crown: true})
 CALL algo.SPpaths({sourceNode: s, targetNode: t, relationshipTypes: ['CAN_REACH'], pathCount: $n}) YIELD path
 ```
 
 ### Run it
-See "Run locally" below. Data: synthetic topology with real CVE ids; KEV and EPSS are live public feeds; CVSS is a snapshot. Tests (66): backend 33 (`cd backend && pip install -r requirements.txt pytest && pytest`) and frontend 33 (`cd frontend && npm test`). Backend unit tests cover the safety tiers, import validation and edge de-duplication, and the live-feed client with the network mocked; integration tests (run in CI against a real FalkorDB service) cover the agent's tools and refusals, the pitch story (4 paths to 0), per-user graphs and per-tenant memory. Frontend tests cover the engine client and its error mapping, signed checkout tokens, subscription handling and the advisor providers. Demo script: [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md). Blog post: [docs/BLOG.md](docs/BLOG.md).
+See "Run locally" below. Data: synthetic topology with real CVE ids; KEV and EPSS are live public feeds; CVSS is a snapshot. Tests (77): backend 44 (`cd backend && pip install -r requirements.txt pytest && pytest`) and frontend 33 (`cd frontend && npm test`). Backend unit tests cover the safety tiers, import validation and edge de-duplication, the live-feed clients (KEV/EPSS/NVD) with the network mocked, Grype/Trivy mapping, approvals and the escalation webhook; integration tests (run in CI against a real FalkorDB service) cover the agent's tools and refusals, the pitch story (4 paths to 0), per-user graphs and per-tenant memory. Frontend tests cover the engine client and its error mapping, signed checkout tokens, subscription handling and the advisor providers. Demo script: [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md). Blog post: [docs/BLOG.md](docs/BLOG.md).
 
 ## The four parts (work on one without touching the others)
 

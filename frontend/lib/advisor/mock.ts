@@ -3,7 +3,7 @@ import type { AdvisorProvider } from "./provider";
 import type { AdvisorEvent } from "./types";
 import { summarize, toolErrorMessage, type ToolSource } from "./tools";
 import { fmtEpssText } from "./format";
-import type { ApplyResult, AttackPathsResult, ChokeResult, ContextResult, ExplainResult, RankedFinding, RecallResult, SimulateResult, TicketResult, FileResult } from "./results";
+import type { ApplyResult, AttackPathsResult, ChokeResult, ContextResult, ExplainResult, RankedFinding, RecallResult, SimulateResult, TicketResult, FileResult, EscalateResult, PendingResult, BlastZoneResult } from "./results";
 
 /**
  * Mock "LLM": picks tools with simple keyword rules and writes its answer from REAL tool results (templated text).
@@ -48,6 +48,58 @@ export const mockProvider: AdvisorProvider = {
 
     await sleep(250, signal);
     const ref = q.match(REF)?.[1]?.toUpperCase();
+
+    // 0f) human-in-the-loop: pending approvals, escalation
+    if (/pending|waiting for (a )?(human|approval)|who (needs|has) to approve/.test(lower)) {
+      const pd: { value?: PendingResult } = {};
+      yield* call("list_pending_approvals", { limit: 10 }, pd);
+      if (!pd.value) return void (yield* say("I couldn't read the approval requests. Is the engine running?", signal));
+      yield* say(
+        pd.value.pending.length
+          ? `Waiting for a human:\n\n${pd.value.pending.map((p) => `• ${p.finding_id} on \`${p.host}\`: ${p.reason}`).join("\n")}\n\nApprove them in the Fix queue; that closes the request.`
+          : "Nothing is waiting for approval right now.",
+        signal
+      );
+      return;
+    }
+    if (/escalat|notify|tell the team|ask (a )?human|request approval/.test(lower)) {
+      const ov: { value?: AttackPathsResult } = {};
+      yield* call("get_attack_paths", { limit: 20 }, ov);
+      const needs = (ov.value?.top_findings ?? []).filter((f) => !f.patched && f.tier === "approval" && (!ref || f.finding_id === ref || f.cve_id === ref));
+      if (!needs.length) return void (yield* say("Nothing needs a human right now: every open finding is either fixed, safe to auto-apply, or off the attack paths.", signal));
+      const out: EscalateResult[] = [];
+      for (const f of needs) {
+        const es: { value?: EscalateResult } = {};
+        yield* call("escalate_to_human", { finding_id: f.finding_id, reason: `${f.reason}; needs a human decision` }, es);
+        if (es.value) out.push(es.value);
+      }
+      const fresh = out.filter((e) => e.status === "requested").length;
+      yield* say(
+        `${fresh ? `I asked a human to approve ${fresh} finding${fresh === 1 ? "" : "s"}` : "A human has already been asked about these"}${out.length - fresh && fresh ? ` (${out.length - fresh} already waiting)` : ""}:\n\n${out.map((e) => `• ${e.finding_id} on \`${e.host}\`: ${e.message}`).join("\n")}\n\nI will not apply these myself.`,
+        signal
+      );
+      return;
+    }
+
+    // 0g) blast zone (FalkorDB BFS)
+    if (/blast zone|compromis|what can .* reach|reach from/.test(lower)) {
+      let host = q.match(/\b([a-z][a-z0-9]*(?:-[a-z0-9]+)+)\b/i)?.[1];
+      if (!host) {
+        const ck: { value?: ChokeResult } = {};
+        yield* call("get_choke_points", { limit: 1 }, ck);
+        host = ck.value?.ranking[0]?.host;
+      }
+      if (!host) return void (yield* say("Tell me which host to look at, for example `api-gateway`.", signal));
+      const bz: { value?: BlastZoneResult } = {};
+      yield* call("get_blast_zone", { host }, bz);
+      if (!bz.value) return void (yield* say(`I couldn't find a host called ${host}.`, signal));
+      yield* say(
+        `${bz.value.note}\n\n` +
+          (bz.value.reachable.length ? bz.value.reachable.map((r) => `• \`${r.node}\` (${r.kind}${r.crown_jewel ? ", crown jewel" : ""}, ${r.attack_paths} live ${r.attack_paths === 1 ? "path" : "paths"})`).join("\n") : "Nothing else is reachable from there."),
+        signal
+      );
+      return;
+    }
 
     // 0e) file it for real (only when explicitly asked)
     if (/\b(file|open|create|submit|push|send)\b.*\b(github issue|issue|ticket)\b/.test(lower) && !/draft/.test(lower)) {
@@ -246,7 +298,7 @@ export const mockProvider: AdvisorProvider = {
     }
 
     yield* say(
-      "I can analyse your attack graph. Try:\n\n• Which vulnerability should I patch first?\n• Which findings are in CISA KEV?\n• What if I patch <finding id>?\n• Fix everything that is safe\n• Where is the choke point?\n• Draft a Jira ticket for the top finding\n• What did you do earlier?",
+      "I can analyse your attack graph. Try:\n\n• Which vulnerability should I patch first?\n• Which findings are in CISA KEV?\n• What if I patch <finding id>?\n• Fix everything that is safe\n• Where is the choke point?\n• Draft a Jira ticket for the top finding\n• What can an attacker reach from api-gateway?\n• Ask a human to approve the risky ones\n• What did you do earlier?",
       signal
     );
   },

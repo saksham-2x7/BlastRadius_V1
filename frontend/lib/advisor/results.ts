@@ -102,3 +102,28 @@ export interface FileResult {
   title: string;
   memory_id: string;
 }
+
+export interface EscalateResult {
+  finding_id: string;
+  cve_id: string;
+  host: string;
+  status: "requested" | "already_pending" | "not_needed";
+  notified: boolean;
+  request_id: string | null;
+  message: string;
+  memory_id: string;
+}
+
+export interface PendingResult {
+  pending: { id: string; ts: number; finding_id: string; host: string; reason: string }[];
+  note: string;
+}
+
+export interface BlastZoneResult {
+  host: string;
+  method: string;
+  reachable: { node: string; kind: "host" | "datastore"; crown_jewel: boolean; attack_paths: number }[];
+  reaches_crown_jewel: boolean;
+  on_attack_paths: number;
+  note: string;
+}

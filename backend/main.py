@@ -16,7 +16,7 @@ import engine
 import enrich
 import ingest
 import threat_tools
-from blastradius_db import accounts, db
+from blastradius_db import accounts, db, memory
 from mcp_server import mcp
 
 
@@ -195,7 +195,12 @@ def fix_auto_all() -> dict:
 
 @app.post("/api/fix/approve")
 def fix_approve(req: FixRequest) -> dict:
-    return engine.apply_fix(req.finding_id, "approved")
+    result = engine.apply_fix(req.finding_id, "approved")
+    try:  # close the approval request the agent opened for this finding, if any
+        memory.resolve_approval(req.finding_id, "human")
+    except Exception:
+        pass
+    return result
 
 
 @app.post("/api/reset")

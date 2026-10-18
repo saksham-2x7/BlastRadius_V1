@@ -49,7 +49,7 @@ export default function ImportModal({ onClose, onImport }: { onClose: () => void
           <div>
             <h2 id="import-title" className="text-lg font-medium">Use your own data</h2>
             <p className="mt-1 text-sm text-muted">
-              Paste or upload your inventory as JSON: hosts, data stores, who can reach whom, and findings (or Trivy reports under <code className="font-mono text-xs">trivy</code>). It becomes
+              Paste or upload your inventory as JSON: hosts, data stores, who can reach whom, and findings (or Trivy / Grype reports under <code className="font-mono text-xs">trivy</code> / <code className="font-mono text-xs">grype</code>). It becomes
               your own private FalkorDB graph; the shared sample is untouched. KEV and EPSS are fetched live.
             </p>
           </div>
