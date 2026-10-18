@@ -112,5 +112,27 @@ async def file_github_issue(
     return await anyio.to_thread.run_sync(t.file_github_issue, finding_id)
 
 
+@mcp.tool(name="escalate_to_human", description=t.TOOLS["escalate_to_human"].description, annotations=ACT)
+async def escalate_to_human(
+    finding_id: Annotated[t.FindingRef, Field(description="Finding id (e.g. 'F4') or CVE id that needs a human.")],
+    reason: Annotated[str, Field(min_length=3, max_length=300, description="Why a human is needed; stored on the request.")],
+) -> t.EscalateOutput:
+    return await anyio.to_thread.run_sync(t.escalate_to_human, finding_id, reason)
+
+
+@mcp.tool(name="list_pending_approvals", description=t.TOOLS["list_pending_approvals"].description, annotations=READ_ONLY)
+async def list_pending_approvals(
+    limit: Annotated[int, Field(ge=1, le=25, description="How many requests to return.")] = 10,
+) -> t.PendingOutput:
+    return await anyio.to_thread.run_sync(t.list_pending_approvals, limit)
+
+
+@mcp.tool(name="get_blast_zone", description=t.TOOLS["get_blast_zone"].description, annotations=READ_ONLY)
+async def get_blast_zone(
+    host: Annotated[t.HostRef, Field(description="Host id, e.g. 'api-gateway'.")],
+) -> t.BlastZoneOutput:
+    return await anyio.to_thread.run_sync(t.get_blast_zone, host)
+
+
 if __name__ == "__main__":
     mcp.run()  # stdio

@@ -7,7 +7,7 @@ from typing import Any
 
 import enrich
 from blastradius_db import seed
-from blastradius_db import db
+from blastradius_db import db, memory
 from blastradius_db.db import run
 
 _lock = threading.Lock()  # serializes fixes so two clicks can't race each other
@@ -40,6 +40,10 @@ def _load_sample() -> None:
     """Reload the sample graph, then re-apply the live KEV/EPSS values if a feed refresh already succeeded."""
     seed.load()
     enrich.apply_cached()
+    try:  # approval requests belong to the previous state of the sample
+        memory.cancel_pending()
+    except Exception:  # memory must never block a restore
+        pass
 
 
 def _is_sample() -> bool:

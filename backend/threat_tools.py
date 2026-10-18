@@ -519,7 +519,9 @@ def apply_safe_fix(finding_id: str, reason: str) -> ApplyOutput:
             decision, msg = "not_applicable", exc.message
     elif f["tier"] == "approval":
         decision = "needs_human_approval"
-        msg = (f"{f['id']} is high-risk ({f['reason']}). I will not apply it myself: a human must approve it in the Fix queue.")
+        rid, _ = memory.open_approval(f["id"], f["host"], reason)
+        msg = (f"{f['id']} is high-risk ({f['reason']}). I will not apply it myself: approval request {rid} is open and a human "
+               "must approve it in the Fix queue.")
     else:
         decision, msg = "not_applicable", f"{f['id']} is not on any attack path ({f['reason']}); nothing to do right now."
     mid = memory.remember("apply_safe_fix", f["id"], f["host"], decision, reason, before, after)
@@ -533,6 +535,157 @@ def recall_agent_memory(limit: int = 10) -> RecallOutput:
         actions=[PastAction(**r) for r in rows],
         note="Stored in FalkorDB as (:Agent)-[:DID]->(:AgentAction); it persists across chats and across 'restore demo'.",
     )
+
+
+# --------------------------------------------------------------------------------------------- human-in-the-loop + blast zone
+HostRef = Annotated[str, Field(min_length=1, max_length=40, pattern=r"^[A-Za-z0-9_.-]+$", description="A host id such as 'api-gateway'.")]
+
+
+class EscalateInput(_Strict):
+    finding_id: FindingRef
+    reason: str = Field(min_length=3, max_length=300, description="Why a human is needed. Stored on the approval request.")
+
+
+class EscalateOutput(BaseModel):
+    finding_id: str
+    cve_id: str
+    host: str
+    status: Literal["requested", "already_pending", "not_needed"]
+    notified: bool = Field(description="True if a message was posted to the team's webhook (opt-in, rate limited).")
+    request_id: str | None
+    message: str
+    memory_id: str
+
+
+class PendingInput(_Strict):
+    limit: int = Field(default=10, ge=1, le=25)
+
+
+class PendingApproval(BaseModel):
+    id: str
+    ts: int
+    finding_id: str
+    host: str
+    reason: str
+
+
+class PendingOutput(BaseModel):
+    pending: list[PendingApproval]
+    note: str
+
+
+class BlastZoneInput(_Strict):
+    host: HostRef
+
+
+class ReachedNode(BaseModel):
+    node: str
+    kind: Literal["host", "datastore"]
+    crown_jewel: bool
+    attack_paths: int = Field(ge=0, description="Live internet-to-crown-jewel paths through this node.")
+
+
+class BlastZoneOutput(BaseModel):
+    host: str
+    method: str
+    reachable: list[ReachedNode]
+    reaches_crown_jewel: bool
+    on_attack_paths: int = Field(ge=0)
+    note: str
+
+
+BFS_REACH = """
+MATCH (s:Host {id: $h})
+CALL algo.BFS(s, 6, 'CAN_REACH') YIELD nodes
+RETURN [n IN nodes | n.id]
+"""
+CYPHER_REACH = "MATCH (:Host {id: $h})-[:CAN_REACH*1..6]->(d) RETURN DISTINCT d.id"
+
+_NOTIFIED: list[float] = []  # timestamps of webhook messages sent by this process
+MAX_NOTIFY_PER_HOUR = 10
+
+
+def _webhook_ready() -> bool:
+    now = time.time()
+    _NOTIFIED[:] = [t for t in _NOTIFIED if now - t < 3600]
+    return os.getenv("ESCALATION_WEBHOOK_URL", "").startswith("https://") and len(_NOTIFIED) < MAX_NOTIFY_PER_HOUR
+
+
+def _notify_webhook(text: str) -> bool:
+    """Post to the team's webhook (Slack, Discord, Teams-compatible JSON). The URL comes only from the deployment's
+    ESCALATION_WEBHOOK_URL, never from a user or the model; https only; capped per hour."""
+    url = os.getenv("ESCALATION_WEBHOOK_URL", "")
+    now = time.time()
+    _NOTIFIED[:] = [t for t in _NOTIFIED if now - t < 3600]
+    if not url.startswith("https://") or len(_NOTIFIED) >= MAX_NOTIFY_PER_HOUR:
+        return False
+    try:
+        req = urllib.request.Request(url, method="POST", data=json.dumps({"text": text, "content": text}).encode(),
+                                     headers={"Content-Type": "application/json", "User-Agent": "blastradius-agent"})
+        with urllib.request.urlopen(req, timeout=8):  # noqa: S310 (https URL from deployment config)
+            pass
+        _NOTIFIED.append(now)
+        return True
+    except Exception:
+        return False
+
+
+def escalate_to_human(finding_id: str, reason: str) -> EscalateOutput:
+    """ACT: hand a high-risk finding to a human. Opens an approval request in the graph (once per finding), and posts to the
+    team's webhook if the deployment configured one. The dashboard's Approve button closes the request."""
+    scan = engine.scan()
+    f = _resolve(scan, finding_id)
+    if f["patched"] or f["tier"] != "approval":
+        why = "already patched" if f["patched"] else f"tier is '{f['tier']}', so it does not need a human"
+        mid = memory.remember("escalate_to_human", f["id"], f["host"], "not_needed", reason, scan["summary"]["paths"], scan["summary"]["paths"])
+        return EscalateOutput(finding_id=f["id"], cve_id=f["cve"], host=f["host"], status="not_needed", notified=False,
+                              request_id=None, message=f"No escalation needed: {f['id']} is {why}.", memory_id=mid)
+    sim = simulate_fix(f["id"])
+    rid, created = memory.open_approval(f["id"], f["host"], reason)
+    notified = False
+    if _webhook_ready() and memory.claim_notification(rid):  # the first escalation of a request sends the team message
+        notified = _notify_webhook(
+            f"BlastRadius agent needs a human to approve {f['cve']} on {f['host']} ({f['reason']}). "
+            f"Fixing it cuts {sim.paths_eliminated} of {sim.paths_before} attack paths. Approve it in the Fix queue. ({reason})")
+        if not notified:
+            memory.release_notification(rid)
+    fresh = created or notified
+    mid = memory.remember("escalate_to_human", f["id"], f["host"], "escalated" if fresh else "already_pending", reason,
+                          sim.paths_before, sim.paths_after)
+    msg = (f"Approval request {rid} is open for {f['id']} ({f['cve']} on {f['host']})" + ("; team notified." if notified else ".")
+           if fresh else f"Approval request {rid} for {f['id']} was already waiting for a human.")
+    return EscalateOutput(finding_id=f["id"], cve_id=f["cve"], host=f["host"], status="requested" if fresh else "already_pending",
+                          notified=notified, request_id=rid, message=msg, memory_id=mid)
+
+
+def list_pending_approvals(limit: int = 10) -> PendingOutput:
+    rows = memory.pending_approvals(limit)
+    return PendingOutput(
+        pending=[PendingApproval(**r) for r in rows],
+        note="Requests the agent opened for fixes it may not apply itself. A human approving the fix in the dashboard closes them.")
+
+
+def get_blast_zone(host: str) -> BlastZoneOutput:
+    """What an attacker can reach after compromising this host: FalkorDB's algo.BFS over CAN_REACH (6 levels)."""
+    scan = engine.scan()
+    info = {n["id"]: n for n in scan["nodes"] if n["kind"] in ("host", "datastore")}
+    if host not in info or info[host]["kind"] != "host":
+        raise ToolNotFound(f"No host '{host}'. Call get_attack_paths or get_choke_points to list host ids.")
+    method = "FalkorDB algo.BFS over CAN_REACH, 6 levels"
+    try:
+        rows = run(BFS_REACH, {"h": host})
+        ids = list(rows[0][0]) if rows else []
+    except Exception:  # an older/newer FalkorDB without this call: same answer with a variable-length Cypher traversal
+        ids = [r[0] for r in run(CYPHER_REACH, {"h": host})]
+        method = "Cypher variable-length traversal over CAN_REACH, 6 hops (algo.BFS unavailable)"
+    reached = [ReachedNode(node=i, kind=info[i]["kind"], crown_jewel=bool(info[i]["crown"]), attack_paths=info[i]["paths"])
+               for i in dict.fromkeys(ids) if i in info and i != host]
+    reached.sort(key=lambda r: (not r.crown_jewel, -r.attack_paths, r.node))
+    crown = any(r.crown_jewel for r in reached)
+    return BlastZoneOutput(
+        host=host, method=method, reachable=reached, reaches_crown_jewel=crown, on_attack_paths=info[host]["paths"],
+        note=(f"An attacker on {host} can reach {len(reached)} more node(s)" + (", including a crown jewel." if crown else "; none of them is a crown jewel."))
+             + " Whether that is exploitable depends on the findings along the way (see on_attack_paths).")
 
 
 # --------------------------------------------------------------------------------------------- registry
@@ -592,5 +745,19 @@ TOOLS: dict[str, ToolDef] = {
         "ACT: file the drafted ticket as a real GitHub issue. Only when the user explicitly asks you to file or open an "
         "issue. Opt-in: does nothing unless the deployment has GitHub configured. Capped per hour; stored in graph memory.",
         FileInput, FileOutput, lambda i: file_github_issue(i.finding_id), read_only=False,
+    ),
+    "escalate_to_human": ToolDef(
+        "ACT: hand a high-risk finding to a human. Opens an approval request in the graph and, if the team configured a "
+        "webhook, notifies them. Use it after apply_safe_fix refuses a finding. The dashboard Approve button closes it.",
+        EscalateInput, EscalateOutput, lambda i: escalate_to_human(i.finding_id, i.reason), read_only=False,
+    ),
+    "list_pending_approvals": ToolDef(
+        "List the approval requests still waiting for a human (fixes the agent may not apply itself).",
+        PendingInput, PendingOutput, lambda i: list_pending_approvals(i.limit),
+    ),
+    "get_blast_zone": ToolDef(
+        "What can an attacker reach after compromising one host? Uses FalkorDB's breadth-first-search algorithm over "
+        "reachability and says whether a crown jewel is in the zone. Read-only.",
+        BlastZoneInput, BlastZoneOutput, lambda i: get_blast_zone(i.host),
     ),
 }

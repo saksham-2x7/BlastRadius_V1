@@ -1,6 +1,6 @@
 import "server-only";
 import { EngineError } from "@/lib/engine";
-import type { ApplyResult, AttackPathsResult, ChokeResult, ContextResult, ExplainResult, RecallResult, SimulateResult, TicketResult, FileResult } from "./results";
+import type { ApplyResult, AttackPathsResult, ChokeResult, ContextResult, ExplainResult, RecallResult, SimulateResult, TicketResult, FileResult, EscalateResult, PendingResult, BlastZoneResult } from "./results";
 
 /** One tool as declared by the MCP server (JSON Schema generated from the Pydantic models). */
 export interface ToolSpec {
@@ -51,6 +51,18 @@ export function summarize(name: string, result: unknown): string {
     case "file_github_issue": {
       const r = result as FileResult;
       return r.filed ? `GitHub issue filed: ${r.url} · saved to memory` : `not filed (${r.message.split(".")[0]}) · saved to memory`;
+    }
+    case "escalate_to_human": {
+      const r = result as EscalateResult;
+      return r.status === "not_needed" ? `${r.finding_id}: no escalation needed` : `${r.finding_id}: approval request ${r.request_id} ${r.status === "already_pending" ? "already waiting" : "open"}${r.notified ? " · team notified" : ""}`;
+    }
+    case "list_pending_approvals": {
+      const r = result as PendingResult;
+      return r.pending.length ? `${r.pending.length} waiting for a human: ${r.pending.map((p) => `${p.finding_id} (${p.host})`).join(", ")}` : "nothing waiting for approval";
+    }
+    case "get_blast_zone": {
+      const r = result as BlastZoneResult;
+      return `${r.host} reaches ${r.reachable.length} node${r.reachable.length === 1 ? "" : "s"}${r.reaches_crown_jewel ? " · crown jewel in reach" : " · no crown jewel"} (FalkorDB BFS)`;
     }
     case "recall_agent_memory": {
       const r = result as RecallResult;

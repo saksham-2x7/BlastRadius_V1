@@ -1,4 +1,4 @@
-"""Validate and convert a user-supplied inventory (JSON, optionally with Trivy reports) into a workspace graph.
+"""Validate and convert a user-supplied inventory (JSON, optionally with Trivy or Grype reports) into a workspace graph.
 
 Rule 6 of the hackathon: only load public, synthetic or your own data. Everything here is size-capped.
 """
@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from blastradius_db import importer
+from blastradius_db import importer, memory
 
 ID = r"^[A-Za-z0-9_.-]{1,40}$"
 CVE = r"^CVE-[0-9]{4}-[0-9]{4,7}$"
@@ -45,12 +45,18 @@ class TrivyIn(_Strict):
     report: dict[str, Any]
 
 
+class GrypeIn(_Strict):
+    host: str = Field(pattern=ID)
+    report: dict[str, Any]
+
+
 class ImportSpec(_Strict):
     hosts: list[HostIn] = Field(min_length=1, max_length=60)
     datastores: list[StoreIn] = Field(min_length=1, max_length=20)
     edges: list[tuple[str, str]] = Field(default_factory=list, max_length=300, description="[from, to] network reachability.")
     findings: list[FindingIn] = Field(default_factory=list, max_length=MAX_FINDINGS)
     trivy: list[TrivyIn] = Field(default_factory=list, max_length=20, description="Trivy JSON reports, one per host.")
+    grype: list[GrypeIn] = Field(default_factory=list, max_length=20, description="Grype JSON reports, one per host.")
 
     @model_validator(mode="after")
     def _consistent(self) -> "ImportSpec":
@@ -64,7 +70,7 @@ class ImportSpec(_Strict):
             if a not in known or b not in known:
                 raise ValueError(f"Edge [{a}, {b}] mentions an unknown node.")
         hosts = {h.id for h in self.hosts}
-        for f in [*self.findings, *self.trivy]:
+        for f in [*self.findings, *self.trivy, *self.grype]:
             if f.host not in hosts:
                 raise ValueError(f"Finding/report references unknown host '{f.host}'.")
         return self
@@ -85,6 +91,21 @@ def _trivy_findings(t: TrivyIn) -> list[FindingIn]:
     return out
 
 
+def _grype_findings(g: GrypeIn) -> list[FindingIn]:
+    out: list[FindingIn] = []
+    for m in (g.report.get("matches") or [])[:500]:
+        v = m.get("vulnerability") or {}
+        cve = str(v.get("id", ""))
+        if not re.fullmatch(CVE, cve):
+            continue
+        scores = [c.get("metrics", {}).get("baseScore") for c in (v.get("cvss") or []) if isinstance(c, dict)]
+        scores = [s for s in scores if isinstance(s, (int, float))]
+        out.append(FindingIn(host=g.host, cve=cve, cvss=float(max(scores)) if scores else 5.0,
+                             product=str((m.get("artifact") or {}).get("name") or "")[:80] or None,
+                             summary=str(v.get("description") or "")[:240] or None))
+    return out
+
+
 def normalize_edges(spec: ImportSpec) -> list[tuple[str, str]]:
     """Drop repeated edges, self-loops and `internet -> host` edges already implied by `exposed: true`. A duplicate edge
     would otherwise be walked twice and double-count every attack path through it."""
@@ -101,7 +122,7 @@ def normalize_edges(spec: ImportSpec) -> list[tuple[str, str]]:
 
 def build(spec: ImportSpec) -> dict[str, int]:
     """Write the CURRENT graph (selected by the caller) from the spec. Returns counts for the response."""
-    findings = [*spec.findings, *(f for t in spec.trivy for f in _trivy_findings(t))]
+    findings = [*spec.findings, *(f for t in spec.trivy for f in _trivy_findings(t)), *(f for g in spec.grype for f in _grype_findings(g))]
     seen: set[tuple[str, str]] = set()
     unique = []
     for f in findings:
@@ -117,4 +138,8 @@ def build(spec: ImportSpec) -> dict[str, int]:
     ]
     edges = normalize_edges(spec)
     importer.load_workspace([h.model_dump() for h in spec.hosts], [s.model_dump() for s in spec.datastores], edges, rows)
+    try:  # a re-import replaces the graph, so earlier approval requests no longer refer to anything
+        memory.cancel_pending()
+    except Exception:
+        pass
     return {"hosts": len(spec.hosts), "datastores": len(spec.datastores), "edges": len(edges), "findings": len(rows)}
